@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BeamAi — Natural Language to Beam analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper: '#EEF1F4',
+          ink:   '#16243B',
+          steel: '#5E7081',
+          grid:  '#D7E0EA',
+          orange:'#E8623A',
+          teal:  '#2F8F6F',
+          blue:  '#3B6EA5',
+          surface:'#FFFFFF'
+        },
+        fontFamily: {
+          display: ['Space Grotesk','sans-serif'],
+          body: ['IBM Plex Sans','sans-serif'],
+          mono: ['IBM Plex Mono','monospace']
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body{
+    background-color:#EEF1F4;
+    background-image:
+      linear-gradient(to right, #D7E0EA 1px, transparent 1px),
+      linear-gradient(to bottom, #D7E0EA 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .section-tag{ font-variant-numeric: tabular-nums; }
+  .fade-in{ animation: fadeIn .4s ease-out; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
+  @media (prefers-reduced-motion: reduce){ .fade-in{ animation:none; } }
+  svg text{ font-family:'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body class="text-ink font-body min-h-screen">
+
+  <!-- Header -->
+  <header class="border-b border-grid bg-surface/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-baseline gap-3">
+        <span class="font-display text-2xl font-bold tracking-tight">BeamAi</span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-steel hidden sm:inline">nl → schema → SFD · BMD · deflection</span>
+      </div>
+      <span class="font-mono text-[11px] text-steel">v1</span>
+    </div>
+    <!-- Stats bar -->
+    <div class="border-t border-grid bg-paper/50">
+      <div class="max-w-6xl mx-auto px-6 py-2 flex items-center gap-6 font-mono text-[11px] text-steel">
+        <span>👥 Visitors: <span id="visitorCount">0</span></span>
+        <span>⚙️ Analyses run: <span id="analysisCount">0</span></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 pb-20">
+
+    <!-- Error banner -->
+    <div id="errorBanner" class="hidden mb-4 bg-orange/10 border border-orange rounded-lg p-4 flex items-start justify-between gap-3 fade-in">
+      <div class="flex items-start gap-3 flex-1">
+        <span class="text-orange text-lg font-bold">⚠</span>
+        <div>
+          <p class="font-display text-sm font-semibold text-orange mb-1">Analysis failed</p>
+          <p id="errorMessage" class="font-body text-sm text-orange/80"></p>
+        </div>
+      </div>
+      <button id="errorClose" class="text-orange/60 hover:text-orange transition-colors flex-shrink-0">✕</button>
+    </div>
+
+    <!-- 00 Prompt -->
+    <section class="pt-10">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="font-mono text-xs text-steel section-tag">00</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Describe the beam</h2>
+        <div class="h-px flex-1 bg-grid"></div>
+      </div>
+      <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
+        <textarea id="promptInput" rows="3"
+          class="w-full resize-none font-body text-[15px] leading-relaxed text-ink placeholder-steel/60 focus:outline-none focus:ring-2 focus:ring-blue/40 rounded-md p-2 -m-2"
+          placeholder="e.g. Analyse a 6m simply supported beam carrying a 20kN point load at midspan and a 10kN/m dead load across the span.">analyse a continuous beam with a udl load of 57kn/m with 3 spans hsving 4.5m</textarea>
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-grid">
+          <p class="font-mono text-[11px] text-steel">Describe → Interpret → Validate → Analyze → Visualize</p>
+          <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
+            Run analysis →
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Loading state -->
+    <section id="loadingState" class="pt-10 hidden">
+      <div class="bg-surface border border-grid rounded-lg p-12 shadow-sm flex flex-col items-center justify-center gap-4">
+        <div class="flex gap-2">
+          <div class="w-2 h-2 rounded-full bg-blue animate-pulse"></div>
+          <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.2s"></div>
+          <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.4s"></div>
+        </div>
+        <p class="font-mono text-sm text-steel">Analyzing your beam…</p>
+      </div>
+    </section>
+
+    <!-- 01 Structural model -->
+    <section id="section01" class="pt-10 hidden">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="font-mono text-xs text-steel section-tag">01</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Structural model</h2>
+        <div class="h-px flex-1 bg-grid"></div>
+      </div>
+
+      <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
+        <!-- chips -->
+        <div class="flex flex-wrap gap-2 mb-4 font-mono text-xs">
+          <span id="chipLength" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">span 13.500 m</span>
+          <span id="chipSupports" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">2 supports</span>
+          <span id="chipLoads" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">1 UDL</span>
+        </div>
+
+        <!-- schematic -->
+        <svg id="schematic" viewBox="0 0 600 170" class="w-full h-auto"></svg>
+
+        <div id="legend" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 font-mono text-[11px] text-steel"></div>
+      </div>
+    </section>
+
+    <!-- 02 Diagrams -->
+    <section id="section02" class="pt-10 hidden">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="font-mono text-xs text-steel section-tag">02</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Internal forces &amp; deflection</h2>
+        <div class="h-px flex-1 bg-grid"></div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Shear force</h3>
+            <span class="font-mono text-[11px] text-steel">kN</span>
+          </div>
+          <svg id="sfd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+        </div>
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Bending moment</h3>
+            <span class="font-mono text-[11px] text-steel">kN·m</span>
+          </div>
+          <svg id="bmd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+        </div>
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Deflection</h3>
+            <span class="font-mono text-[11px] text-steel">mm</span>
+          </div>
+          <svg id="defl" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 Results table -->
+    <section id="section03" class="pt-10 hidden">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="font-mono text-xs text-steel section-tag">03</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Result values</h2>
+        <div class="h-px flex-1 bg-grid"></div>
+      </div>
+      <div class="bg-surface border border-grid rounded-lg shadow-sm overflow-hidden">
+        <table class="w-full font-mono text-sm">
+          <thead>
+            <tr class="bg-paper text-steel uppercase text-[11px] tracking-[0.1em]">
+              <th class="text-left px-4 py-2 font-medium">x (m)</th>
+              <th class="text-right px-4 py-2 font-medium">shear (kN)</th>
+              <th class="text-right px-4 py-2 font-medium">moment (kN·m)</th>
+              <th class="text-right px-4 py-2 font-medium">deflection (mm)</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody" class="divide-y divide-grid"></tbody>
+        </table>
+      </div>
+      <div class="mt-4 flex justify-end gap-3">
+        <button id="downloadPdfBtn" class="font-display text-sm font-semibold bg-teal text-surface px-5 py-2 rounded-md hover:bg-teal/80 transition-colors focus:outline-none focus:ring-2 focus:ring-teal/50 focus:ring-offset-2 focus:ring-offset-surface">
+          Download beam report
+        </button>
+      </div>
+      <!-- <p class="font-mono text-[11px] text-steel mt-2">files written to <code>outputs/analysis_004/</code> — external · internal · results.json</p> -->
+    </section>
+
+  </main>
+
+  <footer class="border-t border-grid">
+    <div class="max-w-6xl mx-auto px-6 py-5 font-mono text-[11px] text-steel flex flex-wrap justify-between gap-2">
+      <span>Built with love by <a href="https://www.linkedin.com/in/muhammad-yahaya-865670228/" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">Muhammad</a></span>
+      <span>Powered by <a href="https://github.com/JesseBonanno/IndeterminateBeam" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">IndeterminateBeam</a> · units N / N·m / mm</span>
+    </div>
+  </footer>
+
+<script>
+
+
+  // ---- Sample Data ----
+  const DATA = {
+    schema: {
+      length: 13.5,
+      supports: [
+        { type: "pin", position: 0 },
+        { type: "roller", position: 13.5 }
+      ],
+      point_loads: [],
+      udls: [ { magnitude: -57000, start: 0, end: 13.5 } ],
+      material: "",
+      reinforcement: ""
+    },
+    results: [
+      { x: 0,      shear: 384749.9943, moment: 0.0385,     deflection: 0 },
+      { x: 3.375,  shear: 192375.0057, moment: 973898.4567, deflection: -9.704094 },
+      { x: 6.75,   shear: 0.0057,      moment: 1298531.25,  deflection: -13.619781 },
+      { x: 10.125, shear: -192375.0057, moment: 973898.4567, deflection: -9.704094 },
+      { x: 13.5,   shear: -384749.9943, moment: 0.0385,     deflection: 0 }
+    ]
+  };
+
+  const COLORS = { sfd: '#3B6EA5', bmd: '#E8623A', defl: '#2F8F6F' };
+
+  // ---- visitor & analysis tracking ----
+  function initializeTracking(){
+    // Initialize visitor count
+    let visitorCount = parseInt(localStorage.getItem('beamAi_visitors')) || 0;
+    visitorCount++;
+    localStorage.setItem('beamAi_visitors', visitorCount);
+    document.getElementById('visitorCount').textContent = visitorCount;
+
+    // Initialize analysis count
+    let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
+    document.getElementById('analysisCount').textContent = analysisCount;
+  }
+
+  function incrementAnalysisCount(){
+    let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
+    analysisCount++;
+    localStorage.setItem('beamAi_analyses', analysisCount);
+    document.getElementById('analysisCount').textContent = analysisCount;
+  }
+
+  initializeTracking();
+
+  // ---- error handling ----
+  function showError(message, duration = 6000){
+    const banner = document.getElementById('errorBanner');
+    const messageEl = document.getElementById('errorMessage');
+    messageEl.textContent = message;
+    banner.classList.remove('hidden');
+    
+    if(duration > 0){
+      setTimeout(() => {
+        banner.classList.add('hidden');
+      }, duration);
+    }
+  }
+
+  document.getElementById('errorClose').addEventListener('click', () => {
+    document.getElementById('errorBanner').classList.add('hidden');
+  });
+
+  function fmt(n, d=2){
+    const v = Number(n);
+    return (Math.abs(v) < 1e-3 ? 0 : v).toFixed(d);
+  }
+
+  // ---- 01 schematic ----
+  function renderSchematic(schema){
+    const W = 600, H = 170;
+    const x0 = 60, x1 = 540;            // beam span on screen
+    const beamY = 55;
+    const L = schema.length;
+    const toX = pos => x0 + (pos / L) * (x1 - x0);
+
+    let svg = `<line x1="${x0}" y1="${beamY}" x2="${x1}" y2="${beamY}" stroke="#16243B" stroke-width="4" stroke-linecap="round"/>`;
+
+    // UDL arrows + load line
+    const labelPositions = []; // Track label positions to avoid overlap
+    
+    schema.udls.forEach(udl => {
+      const sx = toX(udl.start), ex = toX(udl.end);
+      const loadY = 20;
+      svg += `<line x1="${sx}" y1="${loadY}" x2="${ex}" y2="${loadY}" stroke="#E8623A" stroke-width="1.5"/>`;
+      const n = 9;
+      for(let i=0;i<=n;i++){
+        const ax = sx + (ex-sx)*i/n;
+        svg += `<line x1="${ax}" y1="${loadY}" x2="${ax}" y2="${beamY-5}" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrow)"/>`;
+      }
+      const mag = Math.abs(udl.magnitude/1000);
+      const midX = (sx+ex)/2;
+      const labelWidth = mag.toFixed(0).length * 5 + 20;
+      const minDist = labelWidth + 10;
+      
+      // Check if this label overlaps with existing ones
+      let canPlace = true;
+      for(let pos of labelPositions){
+        if(Math.abs(midX - pos) < minDist){
+          canPlace = false;
+          break;
+        }
+      }
+      
+      if(canPlace){
+        svg += `<text x="${midX}" y="12" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${mag.toFixed(0)} kN/m</text>`;
+        labelPositions.push(midX);
+      } else {
+        // Offset label to alternate side if overlap detected
+        svg += `<text x="${midX}" y="5" text-anchor="middle" font-size="10" fill="#E8623A" font-weight="500">${mag.toFixed(0)} kN/m</text>`;
+      }
+    });
+
+    // point loads
+    schema.point_loads.forEach(pl => {
+      const px = toX(pl.position);
+      svg += `<line x1="${px}" y1="${beamY-40}" x2="${px}" y2="${beamY-5}" stroke="#E8623A" stroke-width="2" marker-end="url(#arrow)"/>`;
+      svg += `<text x="${px}" y="${beamY-44}" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${Math.abs(pl.magnitude/1000).toFixed(0)} kN</text>`;
+    });
+
+    // supports
+    schema.supports.forEach(s => {
+      const sx = toX(s.position);
+      const top = beamY + 4;
+      svg += `<polygon points="${sx-10},${top+22} ${sx+10},${top+22} ${sx},${top}" fill="none" stroke="#16243B" stroke-width="2"/>`;
+      if(s.type === 'roller'){
+        svg += `<circle cx="${sx-5}" cy="${top+27}" r="3" fill="#16243B"/>`;
+        svg += `<circle cx="${sx+5}" cy="${top+27}" r="3" fill="#16243B"/>`;
+        svg += `<line x1="${sx-14}" y1="${top+32}" x2="${sx+14}" y2="${top+32}" stroke="#16243B" stroke-width="2"/>`;
+      } else {
+        for(let i=-3;i<=3;i++){
+          svg += `<line x1="${sx+i*5}" y1="${top+22}" x2="${sx+i*5-5}" y2="${top+28}" stroke="#5E7081" stroke-width="1.5"/>`;
+        }
+      }
+      svg += `<text x="${sx}" y="${top+45}" text-anchor="middle" font-size="10" fill="#5E7081" font-weight="500">${s.type} · x=${s.position.toFixed(2)}m</text>`;
+    });
+
+    // dimension line
+    const dimY = 150;
+    svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<line x1="${x0}" y1="${dimY-5}" x2="${x0}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<line x1="${x1}" y1="${dimY-5}" x2="${x1}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<text x="${(x0+x1)/2}" y="${dimY-7}" text-anchor="middle" font-size="11" fill="#5E7081">${L.toFixed(3)} m</text>`;
+
+    const defs = `<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker></defs>`;
+
+    document.getElementById('schematic').innerHTML = defs + svg;
+  }
+
+  // ---- 02 line/area diagrams ----
+  function renderDiagram(svgId, points, color){
+    const W = 600, H = 220;
+    const padL = 52, padR = 16, padT = 18, padB = 28;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+
+    const xs = points.map(p=>p.x);
+    const vs = points.map(p=>p.v);
+    const xMin = 0, xMax = Math.max(...xs);
+    let vMin = Math.min(...vs, 0), vMax = Math.max(...vs, 0);
+    const range = (vMax - vMin) || 1;
+    vMin -= range*0.15; vMax += range*0.15;
+
+    const X = x => padL + (x - xMin) / (xMax - xMin) * plotW;
+    const Y = v => padT + (1 - (v - vMin) / (vMax - vMin)) * plotH;
+    const zeroY = Y(0);
+
+    let path = points.map((p,i)=> `${i===0?'M':'L'} ${X(p.x)} ${Y(p.v)}`).join(' ');
+    let area = `M ${X(points[0].x)} ${zeroY} ` + points.map(p=>`L ${X(p.x)} ${Y(p.v)}`).join(' ') + ` L ${X(points[points.length-1].x)} ${zeroY} Z`;
+
+    let svg = '';
+    // grid
+    for(let i=0;i<=4;i++){
+      const gy = padT + plotH*i/4;
+      svg += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#D7E0EA" stroke-width="1"/>`;
+    }
+    // zero axis
+    svg += `<line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="#5E7081" stroke-width="1"/>`;
+    // area + line
+    svg += `<path d="${area}" fill="${color}" opacity="0.12"/>`;
+    svg += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>`;
+    // points
+    points.forEach(p=>{
+      svg += `<circle cx="${X(p.x)}" cy="${Y(p.v)}" r="3" fill="${color}"><title>x=${p.x.toFixed(3)} m, v=${p.v.toFixed(3)}</title></circle>`;
+    });
+    // y labels
+    svg += `<text x="${padL-6}" y="${padT+4}" text-anchor="end" font-size="10" fill="#5E7081">${vMax.toFixed(1)}</text>`;
+    svg += `<text x="${padL-6}" y="${padT+plotH}" text-anchor="end" font-size="10" fill="#5E7081">${vMin.toFixed(1)}</text>`;
+    if(vMin < 0 && vMax > 0){
+      svg += `<text x="${padL-6}" y="${zeroY+3}" text-anchor="end" font-size="10" fill="#5E7081">0</text>`;
+    }
+    // x labels
+    svg += `<text x="${padL}" y="${H-8}" text-anchor="start" font-size="10" fill="#5E7081">0</text>`;
+    svg += `<text x="${W-padR}" y="${H-8}" text-anchor="end" font-size="10" fill="#5E7081">${xMax.toFixed(1)} m</text>`;
+
+    document.getElementById(svgId).innerHTML = svg;
+  }
+
+  // ---- 03 table ----
+  function renderTable(results){
+    const body = document.getElementById('resultsBody');
+    body.innerHTML = results.map(r => `
+      <tr class="hover:bg-paper/60">
+        <td class="px-4 py-2">${r.x.toFixed(3)}</td>
+        <td class="px-4 py-2 text-right">${(r.shear/1000).toFixed(3)}</td>
+        <td class="px-4 py-2 text-right">${(r.moment/1000).toFixed(3)}</td>
+        <td class="px-4 py-2 text-right">${r.deflection.toFixed(3)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ---- chips + legend ----
+  function renderSummary(schema){
+    document.getElementById('chipLength').textContent = `span ${schema.length.toFixed(3)} m`;
+    document.getElementById('chipSupports').textContent = `${schema.supports.length} supports`;
+    document.getElementById('chipLoads').textContent =
+      `${schema.udls.length} UDL${schema.udls.length!==1?'s':''}` +
+      (schema.point_loads.length ? ` · ${schema.point_loads.length} point load${schema.point_loads.length!==1?'s':''}` : '');
+
+    const legend = document.getElementById('legend');
+    const items = [];
+    schema.supports.forEach(s => items.push(`${s.type} support @ x = ${s.position.toFixed(3)} m`));
+    schema.udls.forEach(u => items.push(`UDL ${Math.abs(u.magnitude/1000).toFixed(3)} kN/m, x ∈ [${u.start.toFixed(2)}, ${u.end.toFixed(2)}] m`));
+    legend.innerHTML = items.map(t=>`<div class="px-2 py-1 border border-grid rounded bg-paper">${t}</div>`).join('');
+  }
+
+  function render(data){
+    currentAnalysisData = data;
+    renderSummary(data.schema);
+    renderSchematic(data.schema);
+    renderDiagram('sfd', data.results.map(r=>({x:r.x, v:r.shear/1000})), COLORS.sfd);
+    renderDiagram('bmd', data.results.map(r=>({x:r.x, v:r.moment/1000})), COLORS.bmd);
+    renderDiagram('defl', data.results.map(r=>({x:r.x, v:r.deflection})), COLORS.defl);
+    renderTable(data.results);
+  }
+
+  // "run" interaction — fetch analysis from API
+  document.getElementById('runBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('runBtn');
+    const promptInput = document.getElementById('promptInput').value.trim();
+    
+    if (!promptInput) {
+      showError('Please describe the beam first');
+      return;
+    }
+
+    const original = btn.textContent;
+    btn.textContent = 'Solving…';
+    btn.disabled = true;
+    incrementAnalysisCount();
+
+    // Show loading state, hide results
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('section01').classList.add('hidden');
+    document.getElementById('section02').classList.add('hidden');
+    document.getElementById('section03').classList.add('hidden');
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: promptInput })
+      });
+
+      if (!response.ok) {
+        let errorDetails = `HTTP ${response.status}`;
+        try {
+          const errorData = await response.json();
+          // Parse backend error response structure
+          if (errorData.detail && typeof errorData.detail === 'object') {
+            const detail = errorData.detail;
+            // Handle { detail: { error: "...", message: "..." } } format
+            if (detail.error && detail.message) {
+              errorDetails = `${detail.error}: ${detail.message}`;
+            } else if (detail.message) {
+              errorDetails = detail.message;
+            } else {
+              errorDetails = JSON.stringify(detail);
+            }
+          } else if (errorData.detail && typeof errorData.detail === 'string') {
+            // Handle { detail: "..." } format
+            errorDetails = errorData.detail;
+          }
+        } catch (e) {
+          // Fallback: parse as plain text if JSON parsing fails
+          const errorText = await response.text();
+          errorDetails = errorText || response.statusText;
+        }
+        const error = new Error(errorDetails);
+        error.statusCode = response.status;
+        throw error;
+      }
+
+      const data = await response.json();
+
+      // Hide loading state, show results
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('section01').classList.remove('hidden');
+      document.getElementById('section02').classList.remove('hidden');
+      document.getElementById('section03').classList.remove('hidden');
+
+      render(data);
+      btn.textContent = original;
+      btn.disabled = false;
+    } catch (error) {
+      document.getElementById('loadingState').classList.add('hidden');
+      
+      // Log full error details to console for debugging
+      console.error('Analysis failed:', error.message);
+      
+      // Determine which error message to display to user
+      // 400: Show validation error details from API
+      // Other: Show generic message for security
+      let displayMessage = 'An error occurred. Please try again later.';
+      
+      if (error.statusCode === 400) {
+        // Validation error - show helpful API message to user
+        displayMessage = error.message;
+      }
+      
+      showError(displayMessage);
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+
+  // PDF download functionality
+  let currentAnalysisData = null;
+
+  document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
+    if (!currentAnalysisData) return;
+
+    const btn = document.getElementById('downloadPdfBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Generating…';
+    btn.disabled = true;
+
+    try {
+      // Wait a moment for libraries to be available
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        throw new Error('jsPDF library not loaded');
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+      let yPos = margin;
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.text('BeamAi Analysis Report', margin, yPos);
+      yPos += 12;
+
+      // Timestamp
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      const now = new Date().toLocaleString();
+      doc.text(`Generated: ${now}`, margin, yPos);
+      yPos += 8;
+
+      // Structural model summary
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text('Structural Model', margin, yPos);
+      yPos += 7;
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      const schema = currentAnalysisData.schema;
+      doc.text(`Beam Length: ${schema.length.toFixed(3)} m`, margin, yPos);
+      yPos += 5;
+      doc.text(`Supports: ${schema.supports.length}`, margin, yPos);
+      yPos += 5;
+      
+      schema.supports.forEach((s, i) => {
+        doc.text(`  • ${s.type} support at x = ${s.position.toFixed(3)} m`, margin + 3, yPos);
+        yPos += 4;
+      });
+
+      schema.udls.forEach((u, i) => {
+        doc.text(`  • UDL: ${Math.abs(u.magnitude/1000).toFixed(3)} kN/m from x = ${u.start.toFixed(2)} to ${u.end.toFixed(2)} m`, margin + 3, yPos);
+        yPos += 4;
+      });
+
+      yPos += 6;
+
+      // Results table using autoTable
+      const tableData = [
+        ['x (m)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']
+      ];
+      
+      currentAnalysisData.results.forEach(r => {
+        tableData.push([
+          r.x.toFixed(3),
+          (r.shear/1000).toFixed(3),
+          (r.moment/1000).toFixed(3),
+          r.deflection.toFixed(3)
+        ]);
+      });
+
+      if (doc.autoTable) {
+        doc.autoTable({
+          startY: yPos,
+          head: [tableData[0]],
+          body: tableData.slice(1),
+          margin: { left: margin, right: margin, top: margin, bottom: margin },
+          styles: { fontSize: 9, cellPadding: 2 },
+          headStyles: { fillColor: [95, 112, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [238, 241, 244] },
+          didDrawPage: function(data) {
+            // Add footer on each page
+            const pageCount = doc.internal.pages.length - 1;
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'normal');
+            doc.text(
+              `Page ${data.pageNumber} of ${pageCount}`,
+              pageWidth / 2,
+              pageHeight - 8,
+              { align: 'center' }
+            );
+          }
+        });
+      } else {
+        // Fallback: simple table without autoTable plugin
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text('Results', margin, yPos);
+        yPos += 7;
+        
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        const cellWidth = (pageWidth - 2 * margin) / 4;
+        const lineHeight = 6;
+        
+        // Header
+        tableData[0].forEach((cell, i) => {
+          doc.text(cell, margin + i * cellWidth + 2, yPos, { maxWidth: cellWidth - 4 });
+        });
+        yPos += lineHeight;
+        
+        // Rows
+        tableData.slice(1).forEach(row => {
+          if (yPos > pageHeight - 20) {
+            doc.addPage();
+            yPos = margin;
+          }
+          row.forEach((cell, i) => {
+            doc.text(cell, margin + i * cellWidth + 2, yPos, { maxWidth: cellWidth - 4 });
+          });
+          yPos += lineHeight;
+        });
+      }
+
+      // Download
+      doc.save(`beam-analysis-${new Date().getTime()}.pdf`);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      showError('Failed to generate PDF. Please try again.');
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

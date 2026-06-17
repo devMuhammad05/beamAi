@@ -1,396 +1,477 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>BeamAi — Structural analysis from plain English</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          paper: '#EEF1F4',
-          ink:   '#16243B',
-          steel: '#5E7081',
-          grid:  '#D7E0EA',
-          orange:'#E8623A',
-          teal:  '#2F8F6F',
-          blue:  '#3B6EA5',
-          surface:'#FFFFFF'
+          paper:   '#EEF1F4',
+          ink:     '#16243B',
+          steel:   '#5E7081',
+          grid:    '#D7E0EA',
+          orange:  '#E8623A',
+          teal:    '#2F8F6F',
+          blue:    '#3B6EA5',
+          surface: '#FFFFFF',
+          /* landing-only extras (dark bg palette) */
+          navy:    '#0E1B2E',
+          navy2:   '#172740',
+          amber:   '#F5A623',
+          fog:     '#F2F5F8',
+          mist:    '#9BAABB',
         },
         fontFamily: {
           display: ['Space Grotesk','sans-serif'],
-          body: ['IBM Plex Sans','sans-serif'],
-          mono: ['IBM Plex Mono','monospace']
+          body:    ['IBM Plex Sans','sans-serif'],
+          mono:    ['IBM Plex Mono','monospace']
         }
       }
     }
   }
 </script>
 <style>
-  body{
-    background-color:#EEF1F4;
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0E1B2E;color:#F2F5F8;font-family:'Space Grotesk',sans-serif;overflow-x:hidden}
+
+  /* blueprint grid */
+  body::before{
+    content:'';position:fixed;inset:0;
     background-image:
-      linear-gradient(to right, #D7E0EA 1px, transparent 1px),
-      linear-gradient(to bottom, #D7E0EA 1px, transparent 1px);
-    background-size: 28px 28px;
+      linear-gradient(rgba(59,110,165,.11) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(59,110,165,.11) 1px,transparent 1px);
+    background-size:40px 40px;
+    pointer-events:none;z-index:0;
   }
-  .section-tag{ font-variant-numeric: tabular-nums; }
-  .fade-in{ animation: fadeIn .4s ease-out; }
-  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
-  @media (prefers-reduced-motion: reduce){ .fade-in{ animation:none; } }
-  svg text{ font-family:'IBM Plex Mono', monospace; }
+
+  /* --- beam draw animation --- */
+  .beam-line{stroke-dasharray:480;stroke-dashoffset:480;animation:drawLine 1s ease-out .2s forwards}
+  .load-arrow{opacity:0;animation:fadeUp .4s ease-out forwards}
+  .support-l{opacity:0;animation:fadeUp .4s ease-out .9s forwards}
+  .support-r{opacity:0;animation:fadeUp .4s ease-out 1s forwards}
+  .label-el{opacity:0;animation:fadeUp .3s ease-out 1.2s forwards}
+  @keyframes drawLine{to{stroke-dashoffset:0}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+  .la1{animation-delay:.6s}.la2{animation-delay:.65s}.la3{animation-delay:.7s}
+  .la4{animation-delay:.75s}.la5{animation-delay:.8s}.la6{animation-delay:.85s}
+
+  /* typewriter */
+  .typewriter{
+    overflow:hidden;white-space:nowrap;width:0;
+    animation:type 1.6s steps(60,end) 1.4s forwards;
+    border-right:2px solid #F5A623;
+  }
+  @keyframes type{to{width:100%}}
+
+  /* modal */
+  #authModal{
+    display:none;position:fixed;inset:0;
+    background:rgba(10,18,30,.78);backdrop-filter:blur(6px);
+    z-index:50;align-items:center;justify-content:center;
+  }
+  #authModal.open{display:flex}
+
+  /* chat page */
+  #chatPage{
+    display:none;position:fixed;inset:0;z-index:60;
+    overflow-y:auto;
+    background:#EEF1F4;
+    background-image:
+      linear-gradient(#D7E0EA 1px,transparent 1px),
+      linear-gradient(90deg,#D7E0EA 1px,transparent 1px);
+    background-size:28px 28px;
+  }
+
+  @media(prefers-reduced-motion:reduce){
+    .beam-line,.load-arrow,.support-l,.support-r,.label-el{animation:none;opacity:1;stroke-dashoffset:0}
+    .typewriter{animation:none;width:100%}
+  }
 </style>
 </head>
-<body class="text-ink font-body min-h-screen">
+<body>
 
-  <!-- Header -->
-  <header class="border-b border-grid bg-surface/80 backdrop-blur sticky top-0 z-10">
+<!-- ═══════════════════════════════════════
+     LANDING PAGE
+════════════════════════════════════════ -->
+<div id="landingPage" class="relative z-10 min-h-screen flex flex-col">
+
+  <!-- nav -->
+  <nav class="flex items-center justify-between px-6 sm:px-12 py-5">
+    <span class="font-display font-bold text-xl tracking-tight text-fog">Beam<span class="text-amber">Ai</span></span>
+    <span class="font-mono text-xs text-mist hidden sm:block">structural · analysis · nlp</span>
+  </nav>
+
+  <!-- hero -->
+  <main class="flex-1 flex flex-col items-center justify-center px-6 text-center pt-4 pb-20">
+
+    <!-- animated beam schematic -->
+    <div class="w-full max-w-lg mb-10">
+      <svg viewBox="0 0 480 130" xmlns="http://www.w3.org/2000/svg" class="w-full">
+        <defs>
+          <marker id="arrW" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#F5A623"/>
+          </marker>
+        </defs>
+        <text x="240" y="12" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#F5A623" class="label-el">57 kN/m</text>
+        <line x1="60"  y1="22" x2="60"  y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la1"/>
+        <line x1="128" y1="22" x2="128" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la2"/>
+        <line x1="196" y1="22" x2="196" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la3"/>
+        <line x1="240" y1="22" x2="240" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la4"/>
+        <line x1="284" y1="22" x2="284" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la5"/>
+        <line x1="352" y1="22" x2="352" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la6"/>
+        <line x1="420" y1="22" x2="420" y2="48" stroke="#F5A623" stroke-width="1.5" marker-end="url(#arrW)" class="load-arrow la6"/>
+        <line x1="55" y1="22" x2="425" y2="22" stroke="#F5A623" stroke-width="1.5" class="label-el"/>
+        <line x1="55" y1="52" x2="425" y2="52" stroke="#F2F5F8" stroke-width="5" stroke-linecap="round" class="beam-line"/>
+        <!-- pin left -->
+        <polygon points="55,58 35,82 75,82" fill="none" stroke="#9BAABB" stroke-width="1.8" class="support-l"/>
+        <line x1="27" y1="86" x2="83" y2="86" stroke="#9BAABB" stroke-width="1.5" class="support-l"/>
+        <line x1="28" y1="86" x2="20" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <line x1="38" y1="86" x2="30" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <line x1="48" y1="86" x2="40" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <line x1="58" y1="86" x2="50" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <line x1="68" y1="86" x2="60" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <line x1="78" y1="86" x2="70" y2="94" stroke="#9BAABB" stroke-width="1.2" class="support-l"/>
+        <text x="55" y="106" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#9BAABB" class="support-l">pin · 0 m</text>
+        <!-- roller right -->
+        <polygon points="425,58 405,82 445,82" fill="none" stroke="#9BAABB" stroke-width="1.8" class="support-r"/>
+        <circle cx="411" cy="87" r="3.5" fill="#9BAABB" class="support-r"/>
+        <circle cx="425" cy="87" r="3.5" fill="#9BAABB" class="support-r"/>
+        <circle cx="439" cy="87" r="3.5" fill="#9BAABB" class="support-r"/>
+        <line x1="398" y1="93" x2="452" y2="93" stroke="#9BAABB" stroke-width="1.5" class="support-r"/>
+        <text x="425" y="106" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#9BAABB" class="support-r">roller · 13.5 m</text>
+        <!-- dim line -->
+        <line x1="55" y1="120" x2="425" y2="120" stroke="#3B6EA5" stroke-width="1" class="label-el"/>
+        <line x1="55" y1="115" x2="55" y2="125" stroke="#3B6EA5" stroke-width="1" class="label-el"/>
+        <line x1="425" y1="115" x2="425" y2="125" stroke="#3B6EA5" stroke-width="1" class="label-el"/>
+        <text x="240" y="128" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#3B6EA5" class="label-el">L = 13.500 m</text>
+      </svg>
+    </div>
+
+    <!-- headline -->
+    <h1 class="font-display font-bold text-4xl sm:text-6xl leading-[1.05] tracking-tight mb-4 max-w-2xl text-fog">
+      Describe a beam.<br><span class="text-amber">Get the analysis.</span>
+    </h1>
+    <p class="text-mist text-base sm:text-lg max-w-md mb-8 leading-relaxed font-body">
+      Type a beam problem in plain English. BeamAi returns shear, moment, and deflection diagrams — instantly.
+    </p>
+
+    <!-- prompt preview -->
+    <div class="w-full max-w-xl mb-10 text-left bg-navy2 border border-blue/30 rounded-lg px-4 py-3">
+      <p class="font-mono text-[11px] text-mist mb-1.5 uppercase tracking-[0.15em]">example prompt</p>
+      <p class="font-mono text-sm text-fog typewriter">analyse a continuous beam with a udl of 57kN/m with 3 spans having 4.5m each</p>
+    </div>
+
+    <!-- CTA -->
+    <button id="tryBtn"
+      class="font-display font-semibold text-base bg-amber text-ink px-8 py-3.5 rounded-md hover:bg-amber/90 active:scale-95 transition-all focus:outline-none focus:ring-2 focus:ring-amber focus:ring-offset-2 focus:ring-offset-navy shadow-lg shadow-amber/20">
+      Try it out →
+    </button>
+
+    <!-- feature strip -->
+    <div class="mt-14 flex flex-wrap justify-center gap-x-8 gap-y-3 font-mono text-[11px] text-mist uppercase tracking-[0.18em]">
+      <span>NLP → schema</span>
+      <span class="text-blue">·</span>
+      <span>SFD · BMD · deflection</span>
+      <span class="text-blue">·</span>
+      <span>IndeterminateBeam engine</span>
+    </div>
+  </main>
+
+  <footer class="px-6 py-4 text-center font-mono text-[11px] text-mist/50">
+    BeamAi · preview v0.1 · for engineers &amp; engineering students
+  </footer>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     GOOGLE AUTH MODAL
+════════════════════════════════════════ -->
+<div id="authModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="bg-surface text-ink rounded-xl shadow-2xl w-full max-w-sm mx-4 p-8 text-center relative">
+    <button id="closeModal" class="absolute top-4 right-4 text-steel hover:text-ink focus:outline-none" aria-label="Close">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <div class="inline-flex items-center gap-2 mb-6">
+      <span class="font-display font-bold text-xl text-ink">Beam<span class="text-amber">Ai</span></span>
+    </div>
+    <h2 id="modalTitle" class="font-display font-bold text-xl mb-1 text-ink">Continue to BeamAi</h2>
+    <p class="text-sm text-steel mb-7 font-mono">Sign in to run beam analyses</p>
+    <button id="googleSignIn"
+      class="w-full flex items-center justify-center gap-3 border border-grid rounded-lg px-4 py-3 text-sm font-semibold text-ink hover:bg-paper active:bg-grid transition-colors focus:outline-none focus:ring-2 focus:ring-blue/40 focus:ring-offset-2 mb-3">
+      <svg width="18" height="18" viewBox="0 0 18 18">
+        <path d="M17.64 9.2a10.34 10.34 0 0 0-.164-1.84H9v3.48h4.844a4.14 4.14 0 0 1-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.614Z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/>
+        <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A9.009 9.009 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+    <p class="text-[11px] text-steel font-mono leading-relaxed">
+      By signing in you agree to our<br>terms of service and privacy policy.
+    </p>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     CHAT / ANALYSIS PAGE
+════════════════════════════════════════ -->
+<div id="chatPage">
+
+  <!-- sticky top nav -->
+  <div class="border-b border-grid bg-surface/80 backdrop-blur sticky top-0 z-10">
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-baseline gap-3">
-        <span class="font-display text-2xl font-bold tracking-tight">BeamAi</span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-steel hidden sm:inline">nl → schema → SFD · BMD · deflection</span>
+        <span class="font-display font-bold text-xl tracking-tight text-ink">Beam<span class="text-amber">Ai</span></span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">analysis workspace</span>
       </div>
-      <span class="font-mono text-[11px] text-steel">v1</span>
-    </div>
-    <!-- Stats bar -->
-    <div class="border-t border-grid bg-paper/50">
-      <div class="max-w-6xl mx-auto px-6 py-2 flex items-center gap-6 font-mono text-[11px] text-steel">
-        <span>👥 Visitors: <span id="visitorCount">0</span></span>
-        <span>⚙️ Analyses run: <span id="analysisCount">0</span></span>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 border border-grid rounded-full px-3 py-1.5 bg-surface">
+          <div class="w-5 h-5 rounded-full bg-blue flex items-center justify-center text-white font-display font-bold text-[10px]">E</div>
+          <span class="font-mono text-[11px] text-ink">engineer@gmail.com</span>
+        </div>
+        <button id="signOutBtn" class="font-mono text-[11px] text-steel hover:text-ink transition-colors">sign out</button>
       </div>
     </div>
-  </header>
+  </div>
 
-  <main class="max-w-6xl mx-auto px-6 pb-20">
+  <div class="max-w-6xl mx-auto px-6 pb-20 font-body text-ink">
 
-    <!-- 00 Prompt -->
-    <section class="pt-10">
+    <!-- 00 · Prompt -->
+    <div class="pt-8">
       <div class="flex items-center gap-3 mb-3">
-        <span class="font-mono text-xs text-steel section-tag">00</span>
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Describe the beam</h2>
+        <span class="font-mono text-xs text-steel">00</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em] text-ink">Describe the beam</h2>
         <div class="h-px flex-1 bg-grid"></div>
       </div>
       <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
         <textarea id="promptInput" rows="3"
-          class="w-full resize-none font-body text-[15px] leading-relaxed text-ink placeholder-steel/60 focus:outline-none focus:ring-2 focus:ring-blue/40 rounded-md p-2 -m-2"
-          placeholder="e.g. Analyse a 6m simply supported beam carrying a 20kN point load at midspan and a 10kN/m dead load across the span.">analyse a continuous beam with a udl load of 57kn/m with 3 spans hsving 4.5m</textarea>
+          class="w-full resize-none text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue/30 rounded-md p-2 -m-2 font-mono text-ink"
+          placeholder="e.g. Analyse a 6m simply supported beam…">analyse a continuous beam with a udl load of 57kn/m with 3 spans having 4.5m</textarea>
         <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-grid">
-          <p class="font-mono text-[11px] text-steel">Describe → Interpret → Validate → Analyze → Visualize</p>
-          <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
+          <p class="font-mono text-[11px] text-steel">LLM → validation → solver → SFD · BMD · δ</p>
+          <button id="runBtn"
+            class="font-display text-sm font-semibold bg-ink text-fog px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-blue focus:ring-offset-2">
             Run analysis →
           </button>
         </div>
       </div>
-    </section>
+    </div>
 
-    <!-- 01 Structural model -->
-    <section class="pt-10">
+    <!-- 01 · Structural model -->
+    <div class="pt-8">
       <div class="flex items-center gap-3 mb-3">
-        <span class="font-mono text-xs text-steel section-tag">01</span>
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Structural model</h2>
+        <span class="font-mono text-xs text-steel">01</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em] text-ink">Structural model</h2>
         <div class="h-px flex-1 bg-grid"></div>
       </div>
-
       <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
-        <!-- chips -->
         <div class="flex flex-wrap gap-2 mb-4 font-mono text-xs">
-          <span id="chipLength" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">span 13.500 m</span>
-          <span id="chipSupports" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">2 supports</span>
-          <span id="chipLoads" class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">1 UDL</span>
-          <span id="chipMaterial" class="px-2.5 py-1 rounded border border-dashed border-steel/40 text-steel">material — not specified</span>
-          <span id="chipRebar" class="px-2.5 py-1 rounded border border-dashed border-steel/40 text-steel">reinforcement — not specified</span>
+          <span class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">span 13.500 m</span>
+          <span class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">2 supports</span>
+          <span class="px-2.5 py-1 rounded border border-grid bg-paper text-ink">1 UDL · 57 kN/m</span>
+          <span class="px-2.5 py-1 rounded border border-dashed border-mist text-steel">material — not specified</span>
         </div>
-
-        <!-- schematic -->
-        <svg id="schematic" viewBox="0 0 600 170" class="w-full h-auto"></svg>
-
-        <div id="legend" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 font-mono text-[11px] text-steel"></div>
+        <svg viewBox="0 0 600 170" class="w-full h-auto">
+          <defs><marker id="arrO" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker></defs>
+          <text x="300" y="12" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="#E8623A" font-weight="600">57 kN/m</text>
+          <line x1="60" y1="20" x2="540" y2="20" stroke="#E8623A" stroke-width="1.5"/>
+          <line x1="60"  y1="20" x2="60"  y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="130" y1="20" x2="130" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="200" y1="20" x2="200" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="300" y1="20" x2="300" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="400" y1="20" x2="400" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="470" y1="20" x2="470" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="540" y1="20" x2="540" y2="46" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrO)"/>
+          <line x1="60" y1="52" x2="540" y2="52" stroke="#16243B" stroke-width="4" stroke-linecap="round"/>
+          <!-- pin -->
+          <polygon points="60,57 42,78 78,78" fill="none" stroke="#16243B" stroke-width="2"/>
+          <line x1="34" y1="82" x2="86" y2="82" stroke="#16243B" stroke-width="2"/>
+          <line x1="35" y1="82" x2="26" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <line x1="45" y1="82" x2="36" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <line x1="55" y1="82" x2="46" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <line x1="65" y1="82" x2="56" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <line x1="75" y1="82" x2="66" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <line x1="85" y1="82" x2="76" y2="90" stroke="#5E7081" stroke-width="1.5"/>
+          <text x="60" y="106" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#5E7081">pin · 0 m</text>
+          <!-- roller -->
+          <polygon points="540,57 522,78 558,78" fill="none" stroke="#16243B" stroke-width="2"/>
+          <circle cx="526" cy="83" r="3.5" fill="#16243B"/>
+          <circle cx="540" cy="83" r="3.5" fill="#16243B"/>
+          <circle cx="554" cy="83" r="3.5" fill="#16243B"/>
+          <line x1="514" y1="90" x2="566" y2="90" stroke="#16243B" stroke-width="2"/>
+          <text x="540" y="106" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#5E7081">roller · 13.5 m</text>
+          <!-- dim -->
+          <line x1="60" y1="148" x2="540" y2="148" stroke="#3B6EA5" stroke-width="1"/>
+          <line x1="60" y1="143" x2="60" y2="153" stroke="#3B6EA5" stroke-width="1"/>
+          <line x1="540" y1="143" x2="540" y2="153" stroke="#3B6EA5" stroke-width="1"/>
+          <text x="300" y="165" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#3B6EA5">L = 13.500 m</text>
+        </svg>
       </div>
-    </section>
+    </div>
 
-    <!-- 02 Diagrams -->
-    <section class="pt-10">
+    <!-- 02 · Diagrams -->
+    <div class="pt-8">
       <div class="flex items-center gap-3 mb-3">
-        <span class="font-mono text-xs text-steel section-tag">02</span>
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Internal forces &amp; deflection</h2>
+        <span class="font-mono text-xs text-steel">02</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em] text-ink">Internal forces &amp; deflection</h2>
         <div class="h-px flex-1 bg-grid"></div>
       </div>
-
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+
+        <!-- SFD -->
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
           <div class="flex items-baseline justify-between mb-2">
-            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Shear force</h3>
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em] text-ink">Shear force</h3>
             <span class="font-mono text-[11px] text-steel">kN</span>
           </div>
-          <svg id="sfd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+          <svg id="cp-sfd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
-        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+
+        <!-- BMD -->
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
           <div class="flex items-baseline justify-between mb-2">
-            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Bending moment</h3>
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em] text-ink">Bending moment</h3>
             <span class="font-mono text-[11px] text-steel">kN·m</span>
           </div>
-          <svg id="bmd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+          <svg id="cp-bmd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
-        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
+
+        <!-- Deflection -->
+        <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
           <div class="flex items-baseline justify-between mb-2">
-            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Deflection</h3>
+            <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em] text-ink">Deflection</h3>
             <span class="font-mono text-[11px] text-steel">mm</span>
           </div>
-          <svg id="defl" viewBox="0 0 600 220" class="w-full h-auto"></svg>
+          <svg id="cp-defl" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
-      </div>
-    </section>
 
-    <!-- 03 Results table -->
-    <section class="pt-10">
+      </div>
+    </div>
+
+    <!-- 03 · Results table -->
+    <div class="pt-8">
       <div class="flex items-center gap-3 mb-3">
-        <span class="font-mono text-xs text-steel section-tag">03</span>
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Result values</h2>
+        <span class="font-mono text-xs text-steel">03</span>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em] text-ink">Result values</h2>
         <div class="h-px flex-1 bg-grid"></div>
       </div>
       <div class="bg-surface border border-grid rounded-lg shadow-sm overflow-hidden">
         <table class="w-full font-mono text-sm">
           <thead>
-            <tr class="bg-paper text-steel uppercase text-[11px] tracking-[0.1em]">
+            <tr class="bg-paper text-steel text-[11px] uppercase tracking-[0.1em]">
               <th class="text-left px-4 py-2 font-medium">x (m)</th>
               <th class="text-right px-4 py-2 font-medium">shear (kN)</th>
               <th class="text-right px-4 py-2 font-medium">moment (kN·m)</th>
               <th class="text-right px-4 py-2 font-medium">deflection (mm)</th>
             </tr>
           </thead>
-          <tbody id="resultsBody" class="divide-y divide-grid"></tbody>
+          <tbody id="cp-table" class="border-t border-grid"></tbody>
         </table>
       </div>
-      <!-- <p class="font-mono text-[11px] text-steel mt-2">files written to <code>outputs/analysis_004/</code> — external · internal · results.json</p> -->
-    </section>
-
-  </main>
-
-  <footer class="border-t border-grid">
-    <div class="max-w-6xl mx-auto px-6 py-5 font-mono text-[11px] text-steel flex flex-wrap justify-between gap-2">
-      <span>Built with love by <a href="https://www.linkedin.com/in/muhammad-yahaya-865670228/" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">Muhammad</a></span>
-      <span>Powered by <a href="https://github.com/JesseBonanno/IndeterminateBeam" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">IndeterminateBeam</a> · units N / N·m / mm</span>
     </div>
-  </footer>
 
+  </div><!-- /max-w -->
+</div><!-- /chatPage -->
+
+
+<!-- ═══════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════ -->
 <script>
-  // ---- sample response (from backend) ----
-  const DATA = {
-    schema: {
-      length: 13.5,
-      supports: [
-        { type: "pin", position: 0 },
-        { type: "roller", position: 13.5 }
-      ],
-      point_loads: [],
-      udls: [ { magnitude: -57000, start: 0, end: 13.5 } ],
-      material: "",
-      reinforcement: ""
-    },
-    results: [
-      { x: 0,      shear: 384749.9943, moment: 0.0385,     deflection: 0 },
-      { x: 3.375,  shear: 192375.0057, moment: 973898.4567, deflection: -9.704094 },
-      { x: 6.75,   shear: 0.0057,      moment: 1298531.25,  deflection: -13.619781 },
-      { x: 10.125, shear: -192375.0057, moment: 973898.4567, deflection: -9.704094 },
-      { x: 13.5,   shear: -384749.9943, moment: 0.0385,     deflection: 0 }
-    ]
-  };
+  const RESULTS = [
+    {x:0,      shear:384749.99,  moment:0.04,       deflection:0},
+    {x:3.375,  shear:192375.01,  moment:973898.46,  deflection:-9.704},
+    {x:6.75,   shear:0.006,      moment:1298531.25, deflection:-13.620},
+    {x:10.125, shear:-192375.01, moment:973898.46,  deflection:-9.704},
+    {x:13.5,   shear:-384749.99, moment:0.04,       deflection:0}
+  ];
 
-  const COLORS = { sfd: '#3B6EA5', bmd: '#E8623A', defl: '#2F8F6F' };
-
-  // ---- visitor & analysis tracking ----
-  function initializeTracking(){
-    // Initialize visitor count
-    let visitorCount = parseInt(localStorage.getItem('beamAi_visitors')) || 0;
-    visitorCount++;
-    localStorage.setItem('beamAi_visitors', visitorCount);
-    document.getElementById('visitorCount').textContent = visitorCount;
-
-    // Initialize analysis count
-    let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
-    document.getElementById('analysisCount').textContent = analysisCount;
-  }
-
-  function incrementAnalysisCount(){
-    let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
-    analysisCount++;
-    localStorage.setItem('beamAi_analyses', analysisCount);
-    document.getElementById('analysisCount').textContent = analysisCount;
-  }
-
-  initializeTracking();
-
-  function fmt(n, d=2){
-    const v = Number(n);
-    return (Math.abs(v) < 1e-3 ? 0 : v).toFixed(d);
-  }
-
-  // ---- 01 schematic ----
-  function renderSchematic(schema){
-    const W = 600, H = 170;
-    const x0 = 60, x1 = 540;            // beam span on screen
-    const beamY = 55;
-    const L = schema.length;
-    const toX = pos => x0 + (pos / L) * (x1 - x0);
-
-    let svg = `<line x1="${x0}" y1="${beamY}" x2="${x1}" y2="${beamY}" stroke="#16243B" stroke-width="4" stroke-linecap="round"/>`;
-
-    // UDL arrows + load line
-    schema.udls.forEach(udl => {
-      const sx = toX(udl.start), ex = toX(udl.end);
-      const loadY = 20;
-      svg += `<line x1="${sx}" y1="${loadY}" x2="${ex}" y2="${loadY}" stroke="#E8623A" stroke-width="1.5"/>`;
-      const n = 9;
-      for(let i=0;i<=n;i++){
-        const ax = sx + (ex-sx)*i/n;
-        svg += `<line x1="${ax}" y1="${loadY}" x2="${ax}" y2="${beamY-5}" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrow)"/>`;
-      }
-      const mag = Math.abs(udl.magnitude/1000);
-      svg += `<text x="${(sx+ex)/2}" y="12" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${mag.toFixed(0)} kN/m</text>`;
-    });
-
-    // point loads
-    schema.point_loads.forEach(pl => {
-      const px = toX(pl.position);
-      svg += `<line x1="${px}" y1="${beamY-40}" x2="${px}" y2="${beamY-5}" stroke="#E8623A" stroke-width="2" marker-end="url(#arrow)"/>`;
-      svg += `<text x="${px}" y="${beamY-44}" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${Math.abs(pl.magnitude/1000).toFixed(0)} kN</text>`;
-    });
-
-    // supports
-    schema.supports.forEach(s => {
-      const sx = toX(s.position);
-      const top = beamY + 4;
-      svg += `<polygon points="${sx-10},${top+22} ${sx+10},${top+22} ${sx},${top}" fill="none" stroke="#16243B" stroke-width="2"/>`;
-      if(s.type === 'roller'){
-        svg += `<circle cx="${sx-5}" cy="${top+27}" r="3" fill="#16243B"/>`;
-        svg += `<circle cx="${sx+5}" cy="${top+27}" r="3" fill="#16243B"/>`;
-        svg += `<line x1="${sx-14}" y1="${top+32}" x2="${sx+14}" y2="${top+32}" stroke="#16243B" stroke-width="2"/>`;
-      } else {
-        for(let i=-3;i<=3;i++){
-          svg += `<line x1="${sx+i*5}" y1="${top+22}" x2="${sx+i*5-5}" y2="${top+28}" stroke="#5E7081" stroke-width="1.5"/>`;
-        }
-      }
-      svg += `<text x="${sx}" y="${top+45}" text-anchor="middle" font-size="10" fill="#5E7081" font-weight="500">${s.type} · x=${s.position.toFixed(2)}m</text>`;
-    });
-
-    // dimension line
-    const dimY = 150;
-    svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#5E7081" stroke-width="1"/>`;
-    svg += `<line x1="${x0}" y1="${dimY-5}" x2="${x0}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
-    svg += `<line x1="${x1}" y1="${dimY-5}" x2="${x1}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
-    svg += `<text x="${(x0+x1)/2}" y="${dimY-7}" text-anchor="middle" font-size="11" fill="#5E7081">${L.toFixed(3)} m</text>`;
-
-    const defs = `<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker></defs>`;
-
-    document.getElementById('schematic').innerHTML = defs + svg;
-  }
-
-  // ---- 02 line/area diagrams ----
-  function renderDiagram(svgId, points, color){
-    const W = 600, H = 220;
-    const padL = 52, padR = 16, padT = 18, padB = 28;
-    const plotW = W - padL - padR, plotH = H - padT - padB;
-
-    const xs = points.map(p=>p.x);
-    const vs = points.map(p=>p.v);
-    const xMin = 0, xMax = Math.max(...xs);
-    let vMin = Math.min(...vs, 0), vMax = Math.max(...vs, 0);
-    const range = (vMax - vMin) || 1;
-    vMin -= range*0.15; vMax += range*0.15;
-
-    const X = x => padL + (x - xMin) / (xMax - xMin) * plotW;
-    const Y = v => padT + (1 - (v - vMin) / (vMax - vMin)) * plotH;
-    const zeroY = Y(0);
-
-    let path = points.map((p,i)=> `${i===0?'M':'L'} ${X(p.x)} ${Y(p.v)}`).join(' ');
-    let area = `M ${X(points[0].x)} ${zeroY} ` + points.map(p=>`L ${X(p.x)} ${Y(p.v)}`).join(' ') + ` L ${X(points[points.length-1].x)} ${zeroY} Z`;
-
-    let svg = '';
-    // grid
-    for(let i=0;i<=4;i++){
-      const gy = padT + plotH*i/4;
-      svg += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#D7E0EA" stroke-width="1"/>`;
-    }
-    // zero axis
-    svg += `<line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="#5E7081" stroke-width="1"/>`;
-    // area + line
-    svg += `<path d="${area}" fill="${color}" opacity="0.12"/>`;
-    svg += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>`;
-    // points
-    points.forEach(p=>{
-      svg += `<circle cx="${X(p.x)}" cy="${Y(p.v)}" r="3" fill="${color}"><title>x=${p.x.toFixed(3)} m, v=${p.v.toFixed(3)}</title></circle>`;
-    });
-    // y labels
-    svg += `<text x="${padL-6}" y="${padT+4}" text-anchor="end" font-size="10" fill="#5E7081">${vMax.toFixed(1)}</text>`;
-    svg += `<text x="${padL-6}" y="${padT+plotH}" text-anchor="end" font-size="10" fill="#5E7081">${vMin.toFixed(1)}</text>`;
-    if(vMin < 0 && vMax > 0){
-      svg += `<text x="${padL-6}" y="${zeroY+3}" text-anchor="end" font-size="10" fill="#5E7081">0</text>`;
-    }
-    // x labels
-    svg += `<text x="${padL}" y="${H-8}" text-anchor="start" font-size="10" fill="#5E7081">0</text>`;
-    svg += `<text x="${W-padR}" y="${H-8}" text-anchor="end" font-size="10" fill="#5E7081">${xMax.toFixed(1)} m</text>`;
-
-    document.getElementById(svgId).innerHTML = svg;
-  }
-
-  // ---- 03 table ----
-  function renderTable(results){
-    const body = document.getElementById('resultsBody');
-    body.innerHTML = results.map(r => `
-      <tr class="hover:bg-paper/60">
-        <td class="px-4 py-2">${r.x.toFixed(3)}</td>
-        <td class="px-4 py-2 text-right">${(r.shear/1000).toFixed(3)}</td>
-        <td class="px-4 py-2 text-right">${(r.moment/1000).toFixed(3)}</td>
-        <td class="px-4 py-2 text-right">${r.deflection.toFixed(3)}</td>
-      </tr>
-    `).join('');
-  }
-
-  // ---- chips + legend ----
-  function renderSummary(schema){
-    document.getElementById('chipLength').textContent = `span ${schema.length.toFixed(3)} m`;
-    document.getElementById('chipSupports').textContent = `${schema.supports.length} supports`;
-    document.getElementById('chipLoads').textContent =
-      `${schema.udls.length} UDL${schema.udls.length!==1?'s':''}` +
-      (schema.point_loads.length ? ` · ${schema.point_loads.length} point load${schema.point_loads.length!==1?'s':''}` : '');
-    document.getElementById('chipMaterial').textContent = `material — ${schema.material || 'not specified'}`;
-    document.getElementById('chipRebar').textContent = `reinforcement — ${schema.reinforcement || 'not specified'}`;
-
-    const legend = document.getElementById('legend');
-    const items = [];
-    schema.supports.forEach(s => items.push(`${s.type} support @ x = ${s.position.toFixed(3)} m`));
-    schema.udls.forEach(u => items.push(`UDL ${Math.abs(u.magnitude/1000).toFixed(3)} kN/m, x ∈ [${u.start.toFixed(2)}, ${u.end.toFixed(2)}] m`));
-    legend.innerHTML = items.map(t=>`<div class="px-2 py-1 border border-grid rounded bg-paper">${t}</div>`).join('');
-  }
-
-  function render(data){
-    renderSummary(data.schema);
-    renderSchematic(data.schema);
-    renderDiagram('sfd', data.results.map(r=>({x:r.x, v:r.shear/1000})), COLORS.sfd);
-    renderDiagram('bmd', data.results.map(r=>({x:r.x, v:r.moment/1000})), COLORS.bmd);
-    renderDiagram('defl', data.results.map(r=>({x:r.x, v:r.deflection})), COLORS.defl);
-    renderTable(data.results);
-  }
-
-  render(DATA);
-
-  // dummy "run" interaction — re-renders the same sample, with a brief pulse
-  document.getElementById('runBtn').addEventListener('click', () => {
-    const btn = document.getElementById('runBtn');
-    const original = btn.textContent;
-    btn.textContent = 'Solving…';
-    btn.disabled = true;
-    incrementAnalysisCount();
-    setTimeout(() => {
-      render(DATA);
-      btn.textContent = original;
-      btn.disabled = false;
-    }, 500);
+  // modal
+  document.getElementById('tryBtn').addEventListener('click', ()=>{
+    document.getElementById('authModal').classList.add('open');
   });
+  document.getElementById('closeModal').addEventListener('click', ()=>{
+    document.getElementById('authModal').classList.remove('open');
+  });
+  document.getElementById('authModal').addEventListener('click', e=>{
+    if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+  });
+
+  // sign in
+  document.getElementById('googleSignIn').addEventListener('click', ()=>{
+    const btn = document.getElementById('googleSignIn');
+    btn.textContent = 'Signing in…'; btn.disabled = true;
+    setTimeout(()=>{
+      document.getElementById('authModal').classList.remove('open');
+      document.getElementById('landingPage').style.display = 'none';
+      const chat = document.getElementById('chatPage');
+      chat.style.display = 'block';
+      renderCharts(); renderTable();
+    }, 900);
+  });
+
+  // sign out
+  document.getElementById('signOutBtn').addEventListener('click', ()=>{
+    document.getElementById('chatPage').style.display = 'none';
+    document.getElementById('landingPage').style.display = 'flex';
+  });
+
+  // re-run
+  document.getElementById('runBtn').addEventListener('click', ()=>{
+    const btn = document.getElementById('runBtn');
+    btn.textContent = 'Solving…'; btn.disabled = true;
+    setTimeout(()=>{ renderCharts(); renderTable(); btn.textContent = 'Run analysis →'; btn.disabled = false; }, 500);
+  });
+
+  // diagram renderer
+  function renderDiagram(svgId, points, color){
+    const W=600,H=220,pL=56,pR=16,pT=18,pB=28;
+    const plotW=W-pL-pR, plotH=H-pT-pB;
+    const xs=points.map(p=>p.x), vs=points.map(p=>p.v);
+    const xMax=Math.max(...xs);
+    let vMin=Math.min(...vs,0), vMax=Math.max(...vs,0);
+    const rng=(vMax-vMin)||1;
+    vMin-=rng*.15; vMax+=rng*.15;
+    const X=x=>pL+(x/xMax)*plotW;
+    const Y=v=>pT+(1-(v-vMin)/(vMax-vMin))*plotH;
+    const z=Y(0);
+    const path=points.map((p,i)=>`${i?'L':'M'}${X(p.x)},${Y(p.v)}`).join(' ');
+    const area=`M${X(points[0].x)},${z} `+points.map(p=>`L${X(p.x)},${Y(p.v)}`).join(' ')+` L${X(points[points.length-1].x)},${z} Z`;
+    let s='';
+    for(let i=0;i<=4;i++) s+=`<line x1="${pL}" y1="${pT+plotH*i/4}" x2="${W-pR}" y2="${pT+plotH*i/4}" stroke="#D7E0EA" stroke-width="1"/>`;
+    s+=`<line x1="${pL}" y1="${z}" x2="${W-pR}" y2="${z}" stroke="#9BAABB" stroke-width="1"/>`;
+    s+=`<path d="${area}" fill="${color}" opacity="0.13"/>`;
+    s+=`<path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>`;
+    points.forEach(p=>{ s+=`<circle cx="${X(p.x)}" cy="${Y(p.v)}" r="3" fill="${color}"/>`; });
+    s+=`<text x="${pL-5}" y="${pT+4}" text-anchor="end" font-size="10" font-family="IBM Plex Mono" fill="#5E7081">${vMax.toFixed(0)}</text>`;
+    s+=`<text x="${pL-5}" y="${pT+plotH}" text-anchor="end" font-size="10" font-family="IBM Plex Mono" fill="#5E7081">${vMin.toFixed(0)}</text>`;
+    s+=`<text x="${pL}" y="${H-6}" text-anchor="start" font-size="10" font-family="IBM Plex Mono" fill="#5E7081">0</text>`;
+    s+=`<text x="${W-pR}" y="${H-6}" text-anchor="end" font-size="10" font-family="IBM Plex Mono" fill="#5E7081">${xMax.toFixed(1)}m</text>`;
+    document.getElementById(svgId).innerHTML = s;
+  }
+
+  function renderCharts(){
+    renderDiagram('cp-sfd',  RESULTS.map(r=>({x:r.x, v:r.shear/1000})),    '#3B6EA5');
+    renderDiagram('cp-bmd',  RESULTS.map(r=>({x:r.x, v:r.moment/1000})),   '#E8623A');
+    renderDiagram('cp-defl', RESULTS.map(r=>({x:r.x, v:r.deflection})),     '#2F8F6F');
+  }
+
+  function renderTable(){
+    document.getElementById('cp-table').innerHTML = RESULTS.map((r,i)=>`
+      <tr class="${i%2?'bg-paper':''} hover:bg-blue/5">
+        <td class="px-4 py-2 text-ink">${r.x.toFixed(3)}</td>
+        <td class="px-4 py-2 text-right text-blue">${(r.shear/1000).toFixed(3)}</td>
+        <td class="px-4 py-2 text-right text-orange">${(r.moment/1000).toFixed(3)}</td>
+        <td class="px-4 py-2 text-right text-teal">${r.deflection.toFixed(3)}</td>
+      </tr>`).join('');
+  }
 </script>
 </body>
 </html>
