@@ -22,7 +22,8 @@
           orange:'#E8623A',
           teal:  '#2F8F6F',
           blue:  '#3B6EA5',
-          surface:'#FFFFFF'
+          surface:'#FFFFFF',
+          amber:   '#F5A623',
         },
         fontFamily: {
           display: ['Space Grotesk','sans-serif'],
@@ -52,20 +53,30 @@
 
   <!-- Header -->
   <header class="border-b border-grid bg-surface/80 backdrop-blur sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <!-- <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-baseline gap-3">
         <span class="font-display text-2xl font-bold tracking-tight">BeamAi</span>
         <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-steel hidden sm:inline">nl → schema → SFD · BMD · deflection</span>
       </div>
       <span class="font-mono text-[11px] text-steel">v1</span>
-    </div>
-    <!-- Stats bar -->
-    <div class="border-t border-grid bg-paper/50">
-      <div class="max-w-6xl mx-auto px-6 py-2 flex items-center gap-6 font-mono text-[11px] text-steel">
-        <span>👥 Visitors: <span id="visitorCount">0</span></span>
-        <span>⚙️ Analyses run: <span id="analysisCount">0</span></span>
+    </div> -->
+
+      <!-- sticky top nav -->
+  <div class="border-b border-grid bg-surface/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-baseline gap-3">
+        <span class="font-display font-bold text-xl tracking-tight text-ink">Beam<span class="text-amber">Ai</span></span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">analysis workspace</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 border border-grid rounded-full px-3 py-1.5 bg-surface">
+          <div class="w-5 h-5 rounded-full bg-blue flex items-center justify-center text-white font-display font-bold text-[10px]">E</div>
+          <span class="font-mono text-[11px] text-ink">engineer@gmail.com</span>
+        </div>
+        <button id="signOutBtn" class="font-mono text-[11px] text-steel hover:text-ink transition-colors">sign out</button>
       </div>
     </div>
+  </div>
   </header>
 
   <main class="max-w-6xl mx-auto px-6 pb-20">
