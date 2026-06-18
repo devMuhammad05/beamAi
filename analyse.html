@@ -70,8 +70,8 @@
       </div>
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 border border-grid rounded-full px-3 py-1.5 bg-surface">
-          <div class="w-5 h-5 rounded-full bg-blue flex items-center justify-center text-white font-display font-bold text-[10px]">E</div>
-          <span class="font-mono text-[11px] text-ink">engineer@gmail.com</span>
+          <div id="userAvatar" class="w-5 h-5 rounded-full bg-blue flex items-center justify-center text-white font-display font-bold text-[10px]">M</div>
+          <span id="userName" class="font-mono text-[11px] text-ink">Muhammad</span>
         </div>
         <button id="signOutBtn" class="font-mono text-[11px] text-steel hover:text-ink transition-colors">sign out</button>
       </div>
@@ -211,12 +211,6 @@
 
   </main>
 
-  <footer class="border-t border-grid">
-    <div class="max-w-6xl mx-auto px-6 py-5 font-mono text-[11px] text-steel flex flex-wrap justify-between gap-2">
-      <span>Built with love by <a href="https://www.linkedin.com/in/muhammad-yahaya-865670228/" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">Muhammad</a></span>
-      <span>Powered by <a href="https://github.com/JesseBonanno/IndeterminateBeam" target="_blank" rel="noopener noreferrer" class="text-blue hover:underline">IndeterminateBeam</a> · units N / N·m / mm</span>
-    </div>
-  </footer>
 
 <script>
 
@@ -247,22 +241,13 @@
 
   // ---- visitor & analysis tracking ----
   function initializeTracking(){
-    // Initialize visitor count
     let visitorCount = parseInt(localStorage.getItem('beamAi_visitors')) || 0;
-    visitorCount++;
-    localStorage.setItem('beamAi_visitors', visitorCount);
-    document.getElementById('visitorCount').textContent = visitorCount;
-
-    // Initialize analysis count
-    let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
-    document.getElementById('analysisCount').textContent = analysisCount;
+    localStorage.setItem('beamAi_visitors', visitorCount + 1);
   }
 
   function incrementAnalysisCount(){
     let analysisCount = parseInt(localStorage.getItem('beamAi_analyses')) || 0;
-    analysisCount++;
-    localStorage.setItem('beamAi_analyses', analysisCount);
-    document.getElementById('analysisCount').textContent = analysisCount;
+    localStorage.setItem('beamAi_analyses', analysisCount + 1);
   }
 
   initializeTracking();
