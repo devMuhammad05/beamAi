@@ -216,7 +216,56 @@
 
 
 <script>
+  // ── config ──────────────────────────────────────────────────────────────
+  const API_BASE = 'http://127.0.0.1:8000';
 
+  // ── auth helpers ─────────────────────────────────────────────────────────
+  function authHeaders() {
+    const token = localStorage.getItem('beamAi_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  // ── auth guard ───────────────────────────────────────────────────────────
+  async function checkAuth() {
+    const token = localStorage.getItem('beamAi_token');
+    if (!token) { window.location.href = 'index.html'; return; }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('not_authed');
+      const user = await res.json();
+      sessionStorage.setItem('beamAi_user', JSON.stringify(user));
+      updateUserDisplay(user);
+    } catch {
+      localStorage.removeItem('beamAi_token');
+      sessionStorage.removeItem('beamAi_user');
+      window.location.href = 'index.html';
+    }
+  }
+
+  function updateUserDisplay(user) {
+    const avatar = document.getElementById('userAvatar');
+    const nameEl = document.getElementById('userName');
+    if (user.picture) {
+      avatar.innerHTML = `<img src="${user.picture}" class="w-full h-full rounded-full object-cover" alt="">`;
+      avatar.className = 'w-5 h-5 rounded-full overflow-hidden';
+    } else {
+      avatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
+    }
+    nameEl.textContent = user.name || user.email || 'User';
+  }
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: authHeaders() });
+    } finally {
+      localStorage.removeItem('beamAi_token');
+      sessionStorage.removeItem('beamAi_user');
+      window.location.href = 'index.html';
+    }
+  });
+
+  checkAuth();
 
   // ---- Sample Data ----
   const DATA = {
@@ -551,11 +600,9 @@
     document.getElementById('section03').classList.add('hidden');
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/analyze', {
+      const response = await fetch(`${API_BASE}/api/analyse`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ prompt: promptInput })
       });
 
@@ -609,10 +656,11 @@
       // 400: Show validation error details from API
       // Other: Show generic message for security
       let displayMessage = 'An error occurred. Please try again later.';
-      
+
       if (error.statusCode === 400) {
-        // Validation error - show helpful API message to user
         displayMessage = error.message;
+      } else if (error.statusCode === 429) {
+        displayMessage = 'Quota limit reached. Please try again in a few minutes.';
       }
       
       showError(displayMessage);

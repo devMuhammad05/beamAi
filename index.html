@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
   tailwind.config = {
     theme: {
@@ -203,6 +204,7 @@
       </svg>
       Continue with Google
     </button>
+    <div id="googleFallbackBtn" class="hidden w-full mb-3"></div>
     <p class="text-[11px] text-steel font-mono leading-relaxed">
       By signing in you agree to our<br>terms of service and privacy policy.
     </p>
@@ -214,22 +216,87 @@
      SCRIPTS
 ════════════════════════════════════════ -->
 <script>
-  // modal
-  document.getElementById('tryBtn').addEventListener('click', ()=>{
+  // ── config ──────────────────────────────────────────────────────────────
+  const GOOGLE_CLIENT_ID = '743062763518-vrvsc4dho4e2e4faftd73r4phf8oh341.apps.googleusercontent.com'; // replace with your OAuth client ID
+  const API_BASE = 'http://127.0.0.1:8000';
+
+  // ── modal controls ───────────────────────────────────────────────────────
+  document.getElementById('tryBtn').addEventListener('click', () => {
     document.getElementById('authModal').classList.add('open');
+    tryGooglePrompt();
   });
-  document.getElementById('closeModal').addEventListener('click', ()=>{
+  document.getElementById('closeModal').addEventListener('click', () => {
     document.getElementById('authModal').classList.remove('open');
   });
-  document.getElementById('authModal').addEventListener('click', e=>{
-    if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+  document.getElementById('authModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
   });
 
-  // sign in → redirect to analysis page
-  document.getElementById('googleSignIn').addEventListener('click', ()=>{
+  // ── google credential callback ───────────────────────────────────────────
+  async function handleCredentialResponse(response) {
     const btn = document.getElementById('googleSignIn');
-    btn.textContent = 'Signing in…'; btn.disabled = true;
-    setTimeout(()=>{ window.location.href = 'analyse.html'; }, 900);
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="font-mono text-sm text-steel">Signing in…</span>';
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ credential: response.credential })
+      });
+      if (!res.ok) throw new Error('auth_failed');
+      const { token, user } = await res.json();
+      localStorage.setItem('beamAi_token', token);
+      sessionStorage.setItem('beamAi_user', JSON.stringify(user));
+      window.location.href = 'analyse.html';
+    } catch {
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+      showAuthError('Sign-in failed. Please try again.');
+    }
+  }
+
+  function showAuthError(msg) {
+    document.getElementById('authError')?.remove();
+    const el = Object.assign(document.createElement('p'), {
+      id: 'authError',
+      className: 'text-xs text-orange font-mono mt-2 text-center',
+      textContent: msg
+    });
+    document.getElementById('googleSignIn').insertAdjacentElement('afterend', el);
+    setTimeout(() => el.remove(), 5000);
+  }
+
+  // ── trigger One Tap; fall back to rendered button if suppressed ──────────
+  function tryGooglePrompt() {
+    if (typeof google === 'undefined' || !google.accounts) return;
+    google.accounts.id.prompt(notification => {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        const fallback = document.getElementById('googleFallbackBtn');
+        fallback.classList.remove('hidden');
+        google.accounts.id.renderButton(fallback, {
+          theme: 'outline', size: 'large', shape: 'rectangular',
+          text: 'continue_with', width: 320
+        });
+        document.getElementById('googleSignIn').classList.add('hidden');
+      }
+    });
+  }
+
+  document.getElementById('googleSignIn').addEventListener('click', tryGooglePrompt);
+
+  // ── init GSI after script loads ──────────────────────────────────────────
+  window.addEventListener('load', () => {
+    if (typeof google !== 'undefined' && google.accounts) {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+        cancel_on_tap_outside: false,
+        use_fedcm_for_prompt: false
+      });
+    }
   });
 </script>
 </body>
