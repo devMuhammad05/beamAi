@@ -649,8 +649,7 @@
     } catch (error) {
       document.getElementById('loadingState').classList.add('hidden');
       
-      // Log full error details to console for debugging
-      console.error('Analysis failed:', error.message);
+      // console.error('Analysis failed:', error.statusCode ?? 'no status', error.message, error);
       
       // Determine which error message to display to user
       // 400: Show validation error details from API
