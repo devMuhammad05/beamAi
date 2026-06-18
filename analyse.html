@@ -104,7 +104,10 @@
         <textarea id="promptInput" rows="3"
           class="w-full resize-none font-body text-[15px] leading-relaxed text-ink placeholder-steel/60 focus:outline-none focus:ring-2 focus:ring-blue/40 rounded-md p-2 -m-2"
           placeholder="e.g. Analyse a 6m simply supported beam carrying a 20kN point load at midspan and a 10kN/m dead load across the span.">analyse a continuous beam with a udl load of 57kn/m with 3 spans hsving 4.5m</textarea>
-        <div class="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-grid">
+        <div class="flex justify-end mt-1.5">
+          <span id="wordCount" class="font-mono text-[11px] text-steel">0/500</span>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-2 pt-3 border-t border-grid">
           <p class="font-mono text-[11px] text-steel">Describe → Interpret → Validate → Analyze → Visualize</p>
           <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
             Run analysis →
@@ -252,6 +255,32 @@
 
   initializeTracking();
 
+  // ---- character count ----
+  const CHAR_LIMIT = 500;
+  const promptInput = document.getElementById('promptInput');
+  const wordCountEl = document.getElementById('wordCount');
+
+  function updateCharCount(){
+    const count = promptInput.value.length;
+    wordCountEl.textContent = `${count}/${CHAR_LIMIT}`;
+    if(count >= CHAR_LIMIT){
+      wordCountEl.classList.add('text-orange');
+      wordCountEl.classList.remove('text-steel');
+    } else {
+      wordCountEl.classList.remove('text-orange');
+      wordCountEl.classList.add('text-steel');
+    }
+  }
+
+  promptInput.addEventListener('input', () => {
+    if(promptInput.value.length > CHAR_LIMIT){
+      promptInput.value = promptInput.value.slice(0, CHAR_LIMIT);
+    }
+    updateCharCount();
+  });
+
+  updateCharCount();
+
   // ---- error handling ----
   function showError(message, duration = 6000){
     const banner = document.getElementById('errorBanner');
@@ -278,80 +307,138 @@
   // ---- 01 schematic ----
   function renderSchematic(schema){
     const W = 600, H = 170;
-    const x0 = 60, x1 = 540;            // beam span on screen
-    const beamY = 55;
+    const x0 = 60, x1 = 540;
+    const beamY = 70;           // lowered to open space above for label rows
+    const loadLineY = 38;       // uniform top edge for all load arrows
     const L = schema.length;
     const toX = pos => x0 + (pos / L) * (x1 - x0);
 
     let svg = `<line x1="${x0}" y1="${beamY}" x2="${x1}" y2="${beamY}" stroke="#16243B" stroke-width="4" stroke-linecap="round"/>`;
 
-    // UDL arrows + load line
-    const labelPositions = []; // Track label positions to avoid overlap
-    
-    schema.udls.forEach(udl => {
+    // ── 1. Collect all label candidates ──────────────────────────────────
+    const labelItems = [];
+
+    schema.udls.forEach((udl, idx) => {
       const sx = toX(udl.start), ex = toX(udl.end);
-      const loadY = 20;
-      svg += `<line x1="${sx}" y1="${loadY}" x2="${ex}" y2="${loadY}" stroke="#E8623A" stroke-width="1.5"/>`;
-      const n = 9;
-      for(let i=0;i<=n;i++){
-        const ax = sx + (ex-sx)*i/n;
-        svg += `<line x1="${ax}" y1="${loadY}" x2="${ax}" y2="${beamY-5}" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrow)"/>`;
-      }
-      const mag = Math.abs(udl.magnitude/1000);
-      const midX = (sx+ex)/2;
-      const labelWidth = mag.toFixed(0).length * 5 + 20;
-      const minDist = labelWidth + 10;
-      
-      // Check if this label overlaps with existing ones
-      let canPlace = true;
-      for(let pos of labelPositions){
-        if(Math.abs(midX - pos) < minDist){
-          canPlace = false;
+      const mag = Math.abs(udl.magnitude / 1000);
+      labelItems.push({ x: (sx + ex) / 2, text: `${mag.toFixed(0)} kN/m`, color: '#E8623A', idx, type: 'udl' });
+    });
+
+    schema.point_loads.forEach((pl, idx) => {
+      const mag = Math.abs(pl.magnitude / 1000);
+      labelItems.push({ x: toX(pl.position), text: `${mag.toFixed(0)} kN`, color: '#E8623A', idx, type: 'point' });
+    });
+
+    (schema.varying_loads || []).forEach((vl, idx) => {
+      const sx = toX(vl.start), ex = toX(vl.end);
+      const sM = Math.abs(vl.start_magnitude / 1000).toFixed(0);
+      const eM = Math.abs(vl.end_magnitude / 1000).toFixed(0);
+      labelItems.push({ x: (sx + ex) / 2, text: `${sM}→${eM} kN/m`, color: '#3B6EA5', idx, type: 'varying' });
+    });
+
+    // ── 2. Assign y-rows greedily (sort by x, place in lowest free row) ──
+    const ROW_Y = [8, 18, 28];
+    const rowSlots = [[], [], []];
+    const CHAR_W = 5.5, PAD = 6;
+
+    labelItems.sort((a, b) => a.x - b.x);
+    labelItems.forEach(lbl => {
+      const hw = (lbl.text.length * CHAR_W) / 2 + PAD;
+      let placed = false;
+      for (let r = 0; r < ROW_Y.length; r++) {
+        const free = rowSlots[r].every(([lo, hi]) => lbl.x - hw > hi || lbl.x + hw < lo);
+        if (free) {
+          lbl.labelY = ROW_Y[r];
+          rowSlots[r].push([lbl.x - hw, lbl.x + hw]);
+          placed = true;
           break;
         }
       }
-      
-      if(canPlace){
-        svg += `<text x="${midX}" y="12" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${mag.toFixed(0)} kN/m</text>`;
-        labelPositions.push(midX);
-      } else {
-        // Offset label to alternate side if overlap detected
-        svg += `<text x="${midX}" y="5" text-anchor="middle" font-size="10" fill="#E8623A" font-weight="500">${mag.toFixed(0)} kN/m</text>`;
+      if (!placed) lbl.labelY = ROW_Y[ROW_Y.length - 1];
+    });
+
+    // ── 3. Draw load geometry ─────────────────────────────────────────────
+    // UDLs
+    schema.udls.forEach(udl => {
+      const sx = toX(udl.start), ex = toX(udl.end);
+      svg += `<line x1="${sx}" y1="${loadLineY}" x2="${ex}" y2="${loadLineY}" stroke="#E8623A" stroke-width="1.5"/>`;
+      const n = Math.max(4, Math.round((ex - sx) / 45));
+      for(let i = 0; i <= n; i++){
+        const ax = sx + (ex - sx) * i / n;
+        svg += `<line x1="${ax}" y1="${loadLineY}" x2="${ax}" y2="${beamY-5}" stroke="#E8623A" stroke-width="1.5" marker-end="url(#arrow)"/>`;
       }
     });
 
-    // point loads
+    // Point loads
     schema.point_loads.forEach(pl => {
       const px = toX(pl.position);
-      svg += `<line x1="${px}" y1="${beamY-40}" x2="${px}" y2="${beamY-5}" stroke="#E8623A" stroke-width="2" marker-end="url(#arrow)"/>`;
-      svg += `<text x="${px}" y="${beamY-44}" text-anchor="middle" font-size="11" fill="#E8623A" font-weight="600">${Math.abs(pl.magnitude/1000).toFixed(0)} kN</text>`;
+      svg += `<line x1="${px}" y1="${loadLineY}" x2="${px}" y2="${beamY-5}" stroke="#E8623A" stroke-width="2" marker-end="url(#arrow)"/>`;
     });
 
-    // supports
+    // Varying loads — proportional trapezoid arrows
+    (schema.varying_loads || []).forEach(vl => {
+      const sx = toX(vl.start), ex = toX(vl.end);
+      const sMag = Math.abs(vl.start_magnitude);
+      const eMag = Math.abs(vl.end_magnitude);
+      const maxMag = Math.max(sMag, eMag, 1);
+      const maxH = beamY - 5 - loadLineY;
+      const n = Math.max(4, Math.round((ex - sx) / 45));
+      const pts = [];
+      for(let i = 0; i <= n; i++){
+        const t = i / n;
+        const ax = sx + (ex - sx) * t;
+        const frac = (sMag + (eMag - sMag) * t) / maxMag;
+        const topY = beamY - 5 - maxH * frac;
+        pts.push(`${ax.toFixed(1)},${topY.toFixed(1)}`);
+        if(frac > 0.05){
+          svg += `<line x1="${ax.toFixed(1)}" y1="${topY.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${beamY-5}" stroke="#3B6EA5" stroke-width="1.5" marker-end="url(#arrowBlue)"/>`;
+        }
+      }
+      svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="#3B6EA5" stroke-width="1.5"/>`;
+    });
+
+    // ── 4. Render labels ──────────────────────────────────────────────────
+    labelItems.forEach(lbl => {
+      svg += `<text x="${lbl.x.toFixed(1)}" y="${lbl.labelY}" text-anchor="middle" font-size="10" fill="${lbl.color}" font-weight="600">${lbl.text}</text>`;
+    });
+
+    // ── 5. Supports ───────────────────────────────────────────────────────
     schema.supports.forEach(s => {
       const sx = toX(s.position);
       const top = beamY + 4;
-      svg += `<polygon points="${sx-10},${top+22} ${sx+10},${top+22} ${sx},${top}" fill="none" stroke="#16243B" stroke-width="2"/>`;
-      if(s.type === 'roller'){
-        svg += `<circle cx="${sx-5}" cy="${top+27}" r="3" fill="#16243B"/>`;
-        svg += `<circle cx="${sx+5}" cy="${top+27}" r="3" fill="#16243B"/>`;
-        svg += `<line x1="${sx-14}" y1="${top+32}" x2="${sx+14}" y2="${top+32}" stroke="#16243B" stroke-width="2"/>`;
+      if(s.type === 'fixed'){
+        const dir = s.position <= L / 2 ? -1 : 1;
+        svg += `<line x1="${sx}" y1="${beamY-14}" x2="${sx}" y2="${beamY+14}" stroke="#16243B" stroke-width="3"/>`;
+        for(let i = 0; i < 5; i++){
+          svg += `<line x1="${sx}" y1="${beamY-10+i*6}" x2="${sx+dir*8}" y2="${beamY-4+i*6}" stroke="#5E7081" stroke-width="1.5"/>`;
+        }
       } else {
-        for(let i=-3;i<=3;i++){
-          svg += `<line x1="${sx+i*5}" y1="${top+22}" x2="${sx+i*5-5}" y2="${top+28}" stroke="#5E7081" stroke-width="1.5"/>`;
+        svg += `<polygon points="${sx-10},${top+22} ${sx+10},${top+22} ${sx},${top}" fill="none" stroke="#16243B" stroke-width="2"/>`;
+        if(s.type === 'roller'){
+          svg += `<circle cx="${sx-5}" cy="${top+27}" r="3" fill="#16243B"/>`;
+          svg += `<circle cx="${sx+5}" cy="${top+27}" r="3" fill="#16243B"/>`;
+          svg += `<line x1="${sx-14}" y1="${top+32}" x2="${sx+14}" y2="${top+32}" stroke="#16243B" stroke-width="2"/>`;
+        } else {
+          // pin
+          for(let i=-3;i<=3;i++){
+            svg += `<line x1="${sx+i*5}" y1="${top+22}" x2="${sx+i*5-5}" y2="${top+28}" stroke="#5E7081" stroke-width="1.5"/>`;
+          }
         }
       }
       svg += `<text x="${sx}" y="${top+45}" text-anchor="middle" font-size="10" fill="#5E7081" font-weight="500">${s.type} · x=${s.position.toFixed(2)}m</text>`;
     });
 
-    // dimension line
-    const dimY = 150;
+    // ── 6. Dimension line ─────────────────────────────────────────────────
+    const dimY = 155;
     svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#5E7081" stroke-width="1"/>`;
     svg += `<line x1="${x0}" y1="${dimY-5}" x2="${x0}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
     svg += `<line x1="${x1}" y1="${dimY-5}" x2="${x1}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
     svg += `<text x="${(x0+x1)/2}" y="${dimY-7}" text-anchor="middle" font-size="11" fill="#5E7081">${L.toFixed(3)} m</text>`;
 
-    const defs = `<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker></defs>`;
+    const defs = `<defs>
+      <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker>
+      <marker id="arrowBlue" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#3B6EA5"/></marker>
+    </defs>`;
 
     document.getElementById('schematic').innerHTML = defs + svg;
   }
@@ -546,127 +633,248 @@
     btn.disabled = true;
 
     try {
-      // Wait a moment for libraries to be available
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        throw new Error('jsPDF library not loaded');
-      }
+      if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF library not loaded');
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 12;
-      let yPos = margin;
 
-      // Title
-      doc.setFontSize(20);
-      doc.setFont(undefined, 'bold');
-      doc.text('BeamAi Analysis Report', margin, yPos);
-      yPos += 12;
+      const PW = doc.internal.pageSize.getWidth();
+      const PH = doc.internal.pageSize.getHeight();
+      const M  = 15;
+      const CW = PW - 2 * M;
+      const FOOTER_Y = PH - 10;
 
-      // Timestamp
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      const now = new Date().toLocaleString();
-      doc.text(`Generated: ${now}`, margin, yPos);
-      yPos += 8;
+      // palette
+      const INK    = [22,  36,  59];
+      const STEEL  = [94, 112, 129];
+      const BLUE   = [59, 110, 165];
+      const ORANGE = [232, 98,  58];
+      const TEAL   = [47, 143, 111];
+      const AMBER  = [245, 166, 35];
+      const PAPER  = [238, 241, 244];
+      const GRID   = [215, 224, 234];
+      const WHITE  = [255, 255, 255];
 
-      // Structural model summary
-      doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
-      doc.text('Structural Model', margin, yPos);
-      yPos += 7;
+      const schema         = currentAnalysisData.schema;
+      const classification = currentAnalysisData.classification || {};
+      const userPrompt     = promptInput.value.trim();
+      const now            = new Date();
+      const dateStr = now.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
+      const timeStr = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
 
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      const schema = currentAnalysisData.schema;
-      doc.text(`Beam Length: ${schema.length.toFixed(3)} m`, margin, yPos);
-      yPos += 5;
-      doc.text(`Supports: ${schema.supports.length}`, margin, yPos);
-      yPos += 5;
-      
-      schema.supports.forEach((s, i) => {
-        doc.text(`  • ${s.type} support at x = ${s.position.toFixed(3)} m`, margin + 3, yPos);
-        yPos += 4;
-      });
+      // ── helpers ────────────────────────────────────────────────────────
+      const setColor  = (rgb) => doc.setTextColor(...rgb);
+      const setFill   = (rgb) => doc.setFillColor(...rgb);
+      const setStroke = (rgb) => doc.setDrawColor(...rgb);
 
-      schema.udls.forEach((u, i) => {
-        doc.text(`  • UDL: ${Math.abs(u.magnitude/1000).toFixed(3)} kN/m from x = ${u.start.toFixed(2)} to ${u.end.toFixed(2)} m`, margin + 3, yPos);
-        yPos += 4;
-      });
-
-      yPos += 6;
-
-      // Results table using autoTable
-      const tableData = [
-        ['x (m)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']
-      ];
-      
-      currentAnalysisData.results.forEach(r => {
-        tableData.push([
-          r.x.toFixed(3),
-          (r.shear/1000).toFixed(3),
-          (r.moment/1000).toFixed(3),
-          r.deflection.toFixed(3)
-        ]);
-      });
-
-      if (doc.autoTable) {
-        doc.autoTable({
-          startY: yPos,
-          head: [tableData[0]],
-          body: tableData.slice(1),
-          margin: { left: margin, right: margin, top: margin, bottom: margin },
-          styles: { fontSize: 9, cellPadding: 2 },
-          headStyles: { fillColor: [95, 112, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
-          alternateRowStyles: { fillColor: [238, 241, 244] },
-          didDrawPage: function(data) {
-            // Add footer on each page
-            const pageCount = doc.internal.pages.length - 1;
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-            doc.text(
-              `Page ${data.pageNumber} of ${pageCount}`,
-              pageWidth / 2,
-              pageHeight - 8,
-              { align: 'center' }
-            );
-          }
-        });
-      } else {
-        // Fallback: simple table without autoTable plugin
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text('Results', margin, yPos);
-        yPos += 7;
-        
-        doc.setFontSize(9);
+      function drawFooter(pageNum, total){
+        doc.setFontSize(8);
         doc.setFont(undefined, 'normal');
-        const cellWidth = (pageWidth - 2 * margin) / 4;
-        const lineHeight = 6;
-        
-        // Header
-        tableData[0].forEach((cell, i) => {
-          doc.text(cell, margin + i * cellWidth + 2, yPos, { maxWidth: cellWidth - 4 });
-        });
-        yPos += lineHeight;
-        
-        // Rows
-        tableData.slice(1).forEach(row => {
-          if (yPos > pageHeight - 20) {
-            doc.addPage();
-            yPos = margin;
-          }
-          row.forEach((cell, i) => {
-            doc.text(cell, margin + i * cellWidth + 2, yPos, { maxWidth: cellWidth - 4 });
-          });
-          yPos += lineHeight;
-        });
+        setColor(STEEL);
+        setStroke(GRID);
+        doc.line(M, FOOTER_Y - 3, PW - M, FOOTER_Y - 3);
+        doc.text('BeamAi  ·  Structural Analysis Report', M, FOOTER_Y);
+        const pg = total ? `Page ${pageNum} of ${total}` : `Page ${pageNum}`;
+        doc.text(pg, PW - M, FOOTER_Y, { align: 'right' });
       }
 
-      // Download
-      doc.save(`beam-analysis-${new Date().getTime()}.pdf`);
+      function sectionLabel(text, y){
+        doc.setFontSize(7.5);
+        doc.setFont(undefined, 'bold');
+        setColor(STEEL);
+        doc.text(text.toUpperCase(), M, y);
+        setStroke(GRID);
+        doc.line(M, y + 1.5, PW - M, y + 1.5);
+        return y + 7;
+      }
+
+      function ensureSpace(y, needed){
+        if (y + needed > PH - 20){
+          drawFooter(doc.internal.pages.length - 1);
+          doc.addPage();
+          setFill(AMBER); doc.rect(0, 0, 4, 5, 'F');
+          return 18;
+        }
+        return y;
+      }
+
+      let y = 0;
+
+      // ── 1. Header band ─────────────────────────────────────────────────
+      setFill(INK);  doc.rect(0, 0, PW, 32, 'F');
+      setFill(AMBER); doc.rect(0, 0, 4, 32, 'F');
+
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      setColor(WHITE);
+      doc.text('BeamAi', M + 3, 14);
+
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      setColor([180, 200, 220]);
+      doc.text('Structural Analysis Report', M + 3, 21);
+
+      doc.setFontSize(8);
+      setColor([130, 155, 180]);
+      doc.text(`${dateStr}  ·  ${timeStr}`, PW - M, 21, { align: 'right' });
+
+      y = 40;
+
+      // ── 2. User prompt ─────────────────────────────────────────────────
+      y = sectionLabel('Beam Description', y);
+
+      const promptLines = doc.splitTextToSize(`"${userPrompt}"`, CW - 12);
+      const promptBoxH  = promptLines.length * 5.2 + 9;
+
+      setFill(PAPER);
+      doc.roundedRect(M, y, CW, promptBoxH, 2, 2, 'F');
+      setFill(BLUE);
+      doc.rect(M, y, 3, promptBoxH, 'F');
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'italic');
+      setColor(INK);
+      doc.text(promptLines, M + 9, y + 6.5);
+
+      y += promptBoxH + 9;
+
+      // ── 3. Classification chips ────────────────────────────────────────
+      if (classification.beam_type){
+        y = ensureSpace(y, 35);
+        y = sectionLabel('Beam Classification', y);
+
+        const beamLabel = (classification.beam_type || '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+
+        const chipW = (CW - 4) / 2;
+        const chipH = 13;
+
+        // chip 1 — beam type
+        setFill(PAPER); doc.roundedRect(M, y, chipW, chipH, 2, 2, 'F');
+        doc.setFontSize(7); doc.setFont(undefined, 'normal'); setColor(STEEL);
+        doc.text('BEAM TYPE', M + 5, y + 5);
+        doc.setFontSize(9.5); doc.setFont(undefined, 'bold'); setColor(INK);
+        doc.text(beamLabel, M + 5, y + 10.5);
+
+        // chip 2 — DSI
+        setFill(PAPER); doc.roundedRect(M + chipW + 4, y, chipW, chipH, 2, 2, 'F');
+        doc.setFontSize(7); doc.setFont(undefined, 'normal'); setColor(STEEL);
+        doc.text('DEGREE OF INDETERMINACY  (DSI)', M + chipW + 9, y + 5);
+        doc.setFontSize(9.5); doc.setFont(undefined, 'bold'); setColor(INK);
+        doc.text(`${classification.dsi ?? '—'}`, M + chipW + 9, y + 10.5);
+
+        y += chipH + 5;
+
+        if (classification.description){
+          doc.setFontSize(9); doc.setFont(undefined, 'normal'); setColor(STEEL);
+          const dl = doc.splitTextToSize(classification.description, CW);
+          doc.text(dl, M, y);
+          y += dl.length * 4.5 + 4;
+        }
+
+        y += 4;
+      }
+
+      // ── 4. Structural model ────────────────────────────────────────────
+      y = ensureSpace(y, 45);
+      y = sectionLabel('Structural Model', y);
+
+      // span badge
+      setFill(INK); doc.roundedRect(M, y, 44, 10, 2, 2, 'F');
+      doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); setColor(WHITE);
+      doc.text(`${schema.length.toFixed(3)} m  span`, M + 4, y + 6.8);
+      y += 14;
+
+      // supports
+      doc.setFontSize(8); doc.setFont(undefined, 'bold'); setColor(INK);
+      doc.text('Supports', M, y); y += 5;
+
+      schema.supports.forEach(s => {
+        y = ensureSpace(y, 6);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+        setColor(STEEL); doc.text('•', M + 2, y);
+        setColor(INK);
+        const tl = s.type.charAt(0).toUpperCase() + s.type.slice(1);
+        doc.text(`${tl} support`, M + 7, y);
+        setColor(STEEL); doc.text(`x = ${s.position.toFixed(3)} m`, M + 50, y);
+        y += 5;
+      });
+
+      y += 3;
+
+      // loads
+      doc.setFontSize(8); doc.setFont(undefined, 'bold'); setColor(INK);
+      doc.text('Applied Loads', M, y); y += 5;
+
+      schema.udls.forEach(u => {
+        y = ensureSpace(y, 6);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+        setColor(ORANGE); doc.text('•', M + 2, y);
+        setColor(INK); doc.text(`UDL  ${Math.abs(u.magnitude/1000).toFixed(1)} kN/m`, M + 7, y);
+        setColor(STEEL); doc.text(`x ∈ [${u.start.toFixed(2)}, ${u.end.toFixed(2)}] m`, M + 58, y);
+        y += 5;
+      });
+
+      (schema.point_loads || []).forEach(pl => {
+        y = ensureSpace(y, 6);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+        setColor(ORANGE); doc.text('•', M + 2, y);
+        setColor(INK); doc.text(`Point load  ${Math.abs(pl.magnitude/1000).toFixed(1)} kN`, M + 7, y);
+        setColor(STEEL); doc.text(`x = ${pl.position.toFixed(3)} m`, M + 58, y);
+        y += 5;
+      });
+
+      (schema.varying_loads || []).forEach(vl => {
+        y = ensureSpace(y, 6);
+        doc.setFontSize(9); doc.setFont(undefined, 'normal');
+        setColor(BLUE); doc.text('•', M + 2, y);
+        setColor(INK);
+        const s0 = Math.abs(vl.start_magnitude/1000).toFixed(1);
+        const s1 = Math.abs(vl.end_magnitude/1000).toFixed(1);
+        doc.text(`Varying  ${s0} → ${s1} kN/m`, M + 7, y);
+        setColor(STEEL); doc.text(`x ∈ [${vl.start.toFixed(2)}, ${vl.end.toFixed(2)}] m`, M + 58, y);
+        y += 5;
+      });
+
+      y += 9;
+
+      // ── 5. Results table ───────────────────────────────────────────────
+      y = ensureSpace(y, 20);
+      y = sectionLabel('Analysis Results', y);
+
+      const tableBody = currentAnalysisData.results.map(r => [
+        r.x.toFixed(3),
+        (r.shear  / 1000).toFixed(3),
+        (r.moment / 1000).toFixed(3),
+        r.deflection.toFixed(4)
+      ]);
+
+      doc.autoTable({
+        startY: y,
+        head: [['x (m)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']],
+        body: tableBody,
+        margin: { left: M, right: M, bottom: 18 },
+        styles: { fontSize: 9, cellPadding: 2.8, textColor: INK, font: 'helvetica' },
+        headStyles: {
+          fillColor: INK, textColor: WHITE,
+          fontStyle: 'bold', fontSize: 9, cellPadding: 3
+        },
+        alternateRowStyles: { fillColor: PAPER },
+        columnStyles: {
+          0: { halign: 'left'  },
+          1: { halign: 'right' },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+        },
+        didDrawPage(data){
+          setFill(AMBER); doc.rect(0, 0, 4, 5, 'F');
+          drawFooter(data.pageNumber, data.pageCount);
+        }
+      });
+
+      doc.save(`beam-report-${now.getTime()}.pdf`);
+
     } catch (error) {
       console.error('PDF generation failed:', error);
       showError('Failed to generate PDF. Please try again.');
