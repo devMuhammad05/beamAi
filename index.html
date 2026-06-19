@@ -167,7 +167,7 @@
     <div id="analysisMetric" class="mt-10 hidden">
       <div class="inline-flex items-center gap-3 border border-grid bg-surface rounded-full px-5 py-2.5 shadow-sm">
         <span class="w-2 h-2 rounded-full bg-teal animate-pulse inline-block"></span>
-        <span class="font-mono text-[12px] text-steel uppercase tracking-[0.15em]">analyses run</span>
+        <span class="font-mono text-[12px] text-steel uppercase tracking-[0.15em]">beams analysed</span>
         <span id="analysisCount" class="font-display font-bold text-lg text-ink">—</span>
       </div>
     </div>
@@ -232,6 +232,9 @@
     ? 'http://127.0.0.1:8000'
     : 'https://beamai-backend.fastapicloud.dev';
 
+  console.log("Environment: " + API_BASE);
+
+  
   // ── modal controls ───────────────────────────────────────────────────────
   document.getElementById('tryBtn').addEventListener('click', () => {
     document.getElementById('authModal').classList.add('open');
@@ -302,25 +305,23 @@
   // ── analysis count metric ────────────────────────────────────────────────
   async function loadAnalysisCount() {
     try {
-      const res = await fetch(`${API_BASE}/api/stats`, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(`${API_BASE}/api/total_beam_analysed`, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return;
-      const { total_analyses } = await res.json();
-      if (typeof total_analyses !== 'number') return;
+      const { total } = await res.json();
+      if (typeof total !== 'number') return;
       const el = document.getElementById('analysisCount');
-      const metric = document.getElementById('analysisMetric');
-      metric.classList.remove('hidden');
-      // animate count up
+      document.getElementById('analysisMetric').classList.remove('hidden');
       const duration = 1000;
       const start = performance.now();
       const step = (now) => {
         const progress = Math.min((now - start) / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.floor(eased * total_analyses).toLocaleString();
+        el.textContent = Math.floor(eased * total).toLocaleString();
         if (progress < 1) requestAnimationFrame(step);
-        else el.textContent = total_analyses.toLocaleString();
+        else el.textContent = total.toLocaleString();
       };
       requestAnimationFrame(step);
-    } catch { /* endpoint not available yet — metric stays hidden */ }
+    } catch (err) { console.error('[BeamAi] stats fetch failed:', err); }
   }
   loadAnalysisCount();
 
