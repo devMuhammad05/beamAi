@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>BeamAi — Structural analysis from plain English</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2316243B'/><text x='16' y='23' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' font-size='20' fill='%23F5A623'>B</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -162,8 +163,17 @@
       Try it out →
     </button>
 
+    <!-- analysis count metric -->
+    <div id="analysisMetric" class="mt-10 hidden">
+      <div class="inline-flex items-center gap-3 border border-grid bg-surface rounded-full px-5 py-2.5 shadow-sm">
+        <span class="w-2 h-2 rounded-full bg-teal animate-pulse inline-block"></span>
+        <span class="font-mono text-[12px] text-steel uppercase tracking-[0.15em]">analyses run</span>
+        <span id="analysisCount" class="font-display font-bold text-lg text-ink">—</span>
+      </div>
+    </div>
+
     <!-- feature strip -->
-    <div class="mt-14 flex flex-wrap justify-center gap-x-8 gap-y-3 font-mono text-[11px] text-steel uppercase tracking-[0.18em]">
+    <div class="mt-8 flex flex-wrap justify-center gap-x-8 gap-y-3 font-mono text-[11px] text-steel uppercase tracking-[0.18em]">
       <span>NLP → schema</span>
       <span class="text-blue">·</span>
       <span>SFD · BMD · deflection</span>
@@ -218,7 +228,9 @@
 <script>
   // ── config ──────────────────────────────────────────────────────────────
   const GOOGLE_CLIENT_ID = '743062763518-vrvsc4dho4e2e4faftd73r4phf8oh341.apps.googleusercontent.com'; // replace with your OAuth client ID
-  const API_BASE = 'http://127.0.0.1:8000';
+  const API_BASE = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    ? 'http://127.0.0.1:8000'
+    : 'https://beamai-backend.fastapicloud.dev';
 
   // ── modal controls ───────────────────────────────────────────────────────
   document.getElementById('tryBtn').addEventListener('click', () => {
@@ -286,6 +298,31 @@
   }
 
   document.getElementById('googleSignIn').addEventListener('click', tryGooglePrompt);
+
+  // ── analysis count metric ────────────────────────────────────────────────
+  async function loadAnalysisCount() {
+    try {
+      const res = await fetch(`${API_BASE}/api/stats`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return;
+      const { total_analyses } = await res.json();
+      if (typeof total_analyses !== 'number') return;
+      const el = document.getElementById('analysisCount');
+      const metric = document.getElementById('analysisMetric');
+      metric.classList.remove('hidden');
+      // animate count up
+      const duration = 1000;
+      const start = performance.now();
+      const step = (now) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.floor(eased * total_analyses).toLocaleString();
+        if (progress < 1) requestAnimationFrame(step);
+        else el.textContent = total_analyses.toLocaleString();
+      };
+      requestAnimationFrame(step);
+    } catch { /* endpoint not available yet — metric stays hidden */ }
+  }
+  loadAnalysisCount();
 
   // ── init GSI after script loads ──────────────────────────────────────────
   window.addEventListener('load', () => {

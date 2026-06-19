@@ -1,5 +1,7 @@
 // ── config ──────────────────────────────────────────────────────────────
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  ? 'http://127.0.0.1:8000'
+  : 'https://beamai-backend.fastapicloud.dev';
 
 // ── auth helpers ─────────────────────────────────────────────────────────
 function authHeaders() {

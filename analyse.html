@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>BeamAi - Natural Language to Beam analysis</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2316243B'/><text x='16' y='23' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' font-size='20' fill='%23F5A623'>B</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -56,7 +57,7 @@
     <!-- <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-baseline gap-3">
         <span class="font-display text-2xl font-bold tracking-tight">BeamAi</span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-steel hidden sm:inline">nl â†’ schema â†’ SFD Â· BMD Â· deflection</span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-steel hidden sm:inline">nl → schema → SFD · BMD · deflection</span>
       </div>
       <span class="font-mono text-[11px] text-steel">v1</span>
     </div> -->
@@ -84,13 +85,13 @@
     <!-- Error banner -->
     <div id="errorBanner" class="hidden mb-4 bg-orange/10 border border-orange rounded-lg p-4 flex items-start justify-between gap-3 fade-in">
       <div class="flex items-start gap-3 flex-1">
-        <span class="text-orange text-lg font-bold">âš </span>
+        <span class="text-orange text-lg font-bold">⚠</span>
         <div>
           <p class="font-display text-sm font-semibold text-orange mb-1">Analysis failed</p>
           <p id="errorMessage" class="font-body text-sm text-orange/80"></p>
         </div>
       </div>
-      <button id="errorClose" class="text-orange/60 hover:text-orange transition-colors flex-shrink-0">âœ•</button>
+      <button id="errorClose" class="text-orange/60 hover:text-orange transition-colors flex-shrink-0">✕</button>
     </div>
 
     <!-- 00 Prompt -->
@@ -108,7 +109,7 @@
           <span id="wordCount" class="font-mono text-[11px] text-steel">0/500</span>
         </div>
         <div class="flex flex-wrap items-center justify-between gap-3 mt-2 pt-3 border-t border-grid">
-          <p class="font-mono text-[11px] text-steel">Describe â†’ Interpret â†’ Validate â†’ Analyze â†’ Visualize</p>
+          <p class="font-mono text-[11px] text-steel">Describe - Interpret - Validate - Analyze - Visualize</p>
           <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
             Run analysis 
           </button>
@@ -124,7 +125,7 @@
           <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.2s"></div>
           <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.4s"></div>
         </div>
-        <p class="font-mono text-sm text-steel">Analyzing your beamâ€¦</p>
+        <p class="font-mono text-sm text-steel">Analyzing your beam…</p>
       </div>
     </section>
 
@@ -170,7 +171,7 @@
         <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
           <div class="flex items-baseline justify-between mb-2">
             <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Bending moment</h3>
-            <span class="font-mono text-[11px] text-steel">kNÂ·m</span>
+            <span class="font-mono text-[11px] text-steel">kN·m</span>
           </div>
           <svg id="bmd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
@@ -197,7 +198,7 @@
             <tr class="bg-paper text-steel uppercase text-[11px] tracking-[0.1em]">
               <th class="text-left px-4 py-2 font-medium">x (m)</th>
               <th class="text-right px-4 py-2 font-medium">shear (kN)</th>
-              <th class="text-right px-4 py-2 font-medium">moment (kNÂ·m)</th>
+              <th class="text-right px-4 py-2 font-medium">moment (kN·m)</th>
               <th class="text-right px-4 py-2 font-medium">deflection (mm)</th>
             </tr>
           </thead>
@@ -209,7 +210,7 @@
           Download beam report
         </button>
       </div>
-      <!-- <p class="font-mono text-[11px] text-steel mt-2">files written to <code>outputs/analysis_004/</code> â€” external Â· internal Â· results.json</p> -->
+      <!-- <p class="font-mono text-[11px] text-steel mt-2">files written to <code>outputs/analysis_004/</code> â€” external · internal · results.json</p> -->
     </section>
 
   </main>
