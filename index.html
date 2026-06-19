@@ -263,7 +263,7 @@
       const { token, user } = await res.json();
       localStorage.setItem('beamAi_token', token);
       sessionStorage.setItem('beamAi_user', JSON.stringify(user));
-      window.location.href = 'analyse.html';
+      window.location.href = 'analyse';
     } catch {
       btn.disabled = false;
       btn.innerHTML = originalHTML;
