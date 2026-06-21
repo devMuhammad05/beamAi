@@ -111,6 +111,14 @@ promptInput.addEventListener('input', () => {
     promptInput.value = promptInput.value.slice(0, CHAR_LIMIT);
   }
   updateCharCount();
+  const hasText = promptInput.value.length > 0;
+  ['uploadBtn', 'cameraBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = hasText;
+    btn.classList.toggle('opacity-40', hasText);
+    btn.classList.toggle('cursor-not-allowed', hasText);
+  });
 });
 
 updateCharCount();
@@ -278,7 +286,7 @@ function renderSchematic(schema){
 }
 
 // ---- 02 line/area diagrams ----
-function renderDiagram(svgId, points, color){
+function renderDiagram(svgId, points, color, showValueTicks = false){
   const W = 600, H = 220;
   const padL = 52, padR = 16, padT = 18, padB = 28;
   const plotW = W - padL - padR, plotH = H - padT - padB;
@@ -322,20 +330,78 @@ function renderDiagram(svgId, points, color){
   svg += `<text x="${padL}" y="${H-8}" text-anchor="start" font-size="10" fill="#5E7081">0</text>`;
   svg += `<text x="${W-padR}" y="${H-8}" text-anchor="end" font-size="10" fill="#5E7081">${xMax.toFixed(1)} m</text>`;
 
+  // intermediate x ticks with value callouts (SFD / BMD only)
+  if (showValueTicks && xMax > 0) {
+    const roughStep = xMax / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(roughStep || 1)));
+    const norm = roughStep / mag;
+    const step = norm < 1.5 ? mag : norm < 3.5 ? 2 * mag : norm < 7.5 ? 5 * mag : 10 * mag;
+
+    for (let t = step; t < xMax - step * 0.1; t = +(t + step).toFixed(10)) {
+      // interpolate curve value at this x
+      let tv = points[points.length - 1].v;
+      for (let i = 0; i < points.length - 1; i++) {
+        if (t >= points[i].x && t <= points[i + 1].x) {
+          const frac = (t - points[i].x) / (points[i + 1].x - points[i].x);
+          tv = points[i].v + frac * (points[i + 1].v - points[i].v);
+          break;
+        }
+      }
+
+      const cx = X(t);
+      const cy = Y(tv);
+
+      // dashed reference line from zero-axis to curve
+      svg += `<line x1="${cx}" y1="${zeroY}" x2="${cx}" y2="${cy}" stroke="${color}" stroke-width="0.75" stroke-dasharray="3,2" opacity="0.35"/>`;
+      // marker dot on the curve
+      svg += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${color}" opacity="0.85"/>`;
+      // x axis tick mark
+      svg += `<line x1="${cx}" y1="${H - padB}" x2="${cx}" y2="${H - padB + 3}" stroke="#8A9BAB" stroke-width="1"/>`;
+      // x position label
+      const xLabel = Number.isInteger(+t.toFixed(6)) ? String(Math.round(t)) : t.toFixed(1);
+      svg += `<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="9" fill="#5E7081">${xLabel}</text>`;
+      // value label — above curve for positive, below for negative, clamped to plot area
+      const rawLY = tv >= 0 ? cy - 9 : cy + 13;
+      const labelY = Math.min(Math.max(rawLY, padT + 8), padT + plotH - 2);
+      svg += `<text x="${cx}" y="${labelY}" text-anchor="middle" font-size="9" font-weight="600" fill="${color}">${tv.toFixed(2)}</text>`;
+    }
+  }
+
   document.getElementById(svgId).innerHTML = svg;
 }
 
 // ---- 03 table ----
-function renderTable(results){
+function renderTable(rows){
   const body = document.getElementById('resultsBody');
-  body.innerHTML = results.map(r => `
+  body.innerHTML = rows.map(r => `
     <tr class="hover:bg-paper/60">
       <td class="px-4 py-2">${r.x.toFixed(3)}</td>
+      <td class="px-4 py-2 text-right">${(r.axial/1000).toFixed(3)}</td>
       <td class="px-4 py-2 text-right">${(r.shear/1000).toFixed(3)}</td>
       <td class="px-4 py-2 text-right">${(r.moment/1000).toFixed(3)}</td>
       <td class="px-4 py-2 text-right">${r.deflection.toFixed(3)}</td>
     </tr>
   `).join('');
+}
+
+// ---- peak indicators ----
+function renderPeaks(data){
+  const sfEl   = document.getElementById('sfdPeak');
+  const bmEl   = document.getElementById('bmdPeak');
+  const deflEl = document.getElementById('deflPeak');
+
+  if(data.max_sf != null){
+    sfEl.textContent = `max ${(data.max_sf/1000).toFixed(3)} kN  ·  x = ${data.max_sf_x} m`;
+    sfEl.classList.remove('hidden');
+  }
+  if(data.max_bm != null){
+    bmEl.textContent = `max ${(data.max_bm/1000).toFixed(3)} kN·m  ·  x = ${data.max_bm_x} m`;
+    bmEl.classList.remove('hidden');
+  }
+  if(data.max_deflection != null){
+    deflEl.textContent = `max ${Math.abs(data.max_deflection).toFixed(4)} mm  ·  x = ${data.max_deflection_x} m`;
+    deflEl.classList.remove('hidden');
+  }
 }
 
 // ---- chips + legend ----
@@ -353,14 +419,31 @@ function renderSummary(schema){
   legend.innerHTML = items.map(t=>`<div class="px-2 py-1 border border-grid rounded bg-paper">${t}</div>`).join('');
 }
 
+function normalizeData(data){
+  const rows = Array.isArray(data.results) ? data.results : (data.rows ?? []);
+  return {
+    schema:           data.schema,
+    classification:   data.classification,
+    rows,
+    max_sf:           data.max_sf,
+    max_sf_x:         data.max_sf_x,
+    max_bm:           data.max_bm,
+    max_bm_x:         data.max_bm_x,
+    max_deflection:   data.max_deflection,
+    max_deflection_x: data.max_deflection_x,
+  };
+}
+
 function render(data){
-  currentAnalysisData = data;
-  renderSummary(data.schema);
-  renderSchematic(data.schema);
-  renderDiagram('sfd', data.results.map(r=>({x:r.x, v:r.shear/1000})), COLORS.sfd);
-  renderDiagram('bmd', data.results.map(r=>({x:r.x, v:r.moment/1000})), COLORS.bmd);
-  renderDiagram('defl', data.results.map(r=>({x:r.x, v:r.deflection})), COLORS.defl);
-  renderTable(data.results);
+  const nd = normalizeData(data);
+  currentAnalysisData = nd;
+  renderSummary(nd.schema);
+  renderSchematic(nd.schema);
+  renderDiagram('sfd',  nd.rows.map(r=>({x:r.x, v:r.shear/1000})),  COLORS.sfd,  true);
+  renderDiagram('bmd',  nd.rows.map(r=>({x:r.x, v:r.moment/1000})), COLORS.bmd,  true);
+  renderDiagram('defl', nd.rows.map(r=>({x:r.x, v:r.deflection})),  COLORS.defl, true);
+  renderTable(nd.rows);
+  renderPeaks(nd);
 }
 
 // "run" interaction — fetch analysis from API
@@ -368,8 +451,8 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   const btn = document.getElementById('runBtn');
   const promptInput = document.getElementById('promptInput').value.trim();
 
-  if (!promptInput) {
-    showError('Please describe the beam first');
+  if (!promptInput && !attachedFile1) {
+    showError('Please describe the beam or attach an image first');
     return;
   }
 
@@ -383,13 +466,26 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   document.getElementById('section01').classList.add('hidden');
   document.getElementById('section02').classList.add('hidden');
   document.getElementById('section03').classList.add('hidden');
+  ['sfdPeak','bmdPeak','deflPeak'].forEach(id => document.getElementById(id).classList.add('hidden'));
 
   try {
-    const response = await fetch(`${API_BASE}/api/analyse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ prompt: promptInput })
-    });
+    let response;
+    if (attachedFile1) {
+      const fd = new FormData();
+      fd.append('image1', attachedFile1, 'image1.jpg');
+      if (promptInput) fd.append('prompt', promptInput);
+      response = await fetch(`${API_BASE}/api/analyse-image`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: fd,
+      });
+    } else {
+      response = await fetch(`${API_BASE}/api/analyse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ prompt: promptInput }),
+      });
+    }
 
     if (!response.ok) {
       let errorDetails = `HTTP ${response.status}`;
@@ -417,6 +513,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     }
 
     const data = await response.json();
+    console.log('analysis response:', data);
 
     // Hide loading state, show results
     document.getElementById('loadingState').classList.add('hidden');
@@ -434,8 +531,10 @@ document.getElementById('runBtn').addEventListener('click', async () => {
 
     let displayMessage = 'An error occurred. Please try again later.';
 
-    if (error.statusCode === 400) {
+    if (error.statusCode === 400 || error.statusCode === 422) {
       displayMessage = error.message;
+    } else if (error.statusCode === 413) {
+      displayMessage = 'Image too large. Each file must be under 0.5 MB.';
     } else if (error.statusCode === 429) {
       displayMessage = 'Quota limit reached. Please try again in a few minutes.';
     }
@@ -664,12 +763,39 @@ document.getElementById('downloadPdfBtn').addEventListener('click', async () => 
 
     y += 9;
 
-    // ── 5. Results table ───────────────────────────────────────────────
+    // ── 5. Peak values ─────────────────────────────────────────────────
+    if (currentAnalysisData.max_sf != null) {
+      y = ensureSpace(y, 38);
+      y = sectionLabel('Peak Values', y);
+
+      const peakRows = [
+        { label: 'Max Shear Force',    value: `${(currentAnalysisData.max_sf / 1000).toFixed(3)} kN`,           at: currentAnalysisData.max_sf_x,          color: BLUE },
+        { label: 'Max Bending Moment', value: `${(currentAnalysisData.max_bm / 1000).toFixed(3)} kN·m`,         at: currentAnalysisData.max_bm_x,          color: ORANGE },
+        { label: 'Max Deflection',     value: `${Math.abs(currentAnalysisData.max_deflection ?? 0).toFixed(4)} mm`, at: currentAnalysisData.max_deflection_x, color: TEAL },
+      ];
+
+      peakRows.forEach(pk => {
+        y = ensureSpace(y, 8);
+        setFill(pk.color); doc.circle(M + 2.5, y - 1.5, 1.5, 'F');
+        doc.setFontSize(9); doc.setFont(undefined, 'normal'); setColor(STEEL);
+        doc.text(pk.label, M + 7, y);
+        doc.setFont(undefined, 'bold'); setColor(INK);
+        doc.text(pk.value, M + 65, y);
+        doc.setFont(undefined, 'normal'); setColor(STEEL);
+        doc.text(`at x = ${pk.at} m`, M + 108, y);
+        y += 6;
+      });
+
+      y += 5;
+    }
+
+    // ── 6. Results table ───────────────────────────────────────────────
     y = ensureSpace(y, 20);
     y = sectionLabel('Analysis Results', y);
 
-    const tableBody = currentAnalysisData.results.map(r => [
+    const tableBody = currentAnalysisData.rows.map(r => [
       r.x.toFixed(3),
+      (r.axial  / 1000).toFixed(3),
       (r.shear  / 1000).toFixed(3),
       (r.moment / 1000).toFixed(3),
       r.deflection.toFixed(4)
@@ -677,7 +803,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', async () => 
 
     doc.autoTable({
       startY: y,
-      head: [['x (m)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']],
+      head: [['x (m)', 'Axial (kN)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']],
       body: tableBody,
       margin: { left: M, right: M, bottom: 18 },
       styles: { fontSize: 9, cellPadding: 2.8, textColor: INK, font: 'helvetica' },
@@ -708,3 +834,89 @@ document.getElementById('downloadPdfBtn').addEventListener('click', async () => 
     btn.disabled = false;
   }
 });
+
+// ── image upload & camera capture ─────────────────────────────────────────
+let attachedImageBase64 = null;
+let attachedFile1 = null;
+let cameraStream = null;
+
+const uploadBtn        = document.getElementById('uploadBtn');
+const cameraBtn        = document.getElementById('cameraBtn');
+const imageUpload      = document.getElementById('imageUpload');
+const imagePreviewWrap = document.getElementById('imagePreviewWrap');
+const previewImg       = document.getElementById('previewImg');
+const removeImageBtn   = document.getElementById('removeImageBtn');
+const cameraModal      = document.getElementById('cameraModal');
+const closeCameraBtn   = document.getElementById('closeCameraBtn');
+const cameraFeed       = document.getElementById('cameraFeed');
+const cameraCanvas     = document.getElementById('cameraCanvas');
+const captureBtn       = document.getElementById('captureBtn');
+
+function setAttachedImage(dataUrl, file) {
+  attachedImageBase64 = dataUrl;
+  attachedFile1 = file || null;
+  previewImg.src = dataUrl;
+  imagePreviewWrap.classList.remove('hidden');
+  promptInput.disabled = true;
+  promptInput.classList.add('opacity-40', 'cursor-not-allowed');
+}
+
+function clearAttachedImage() {
+  attachedImageBase64 = null;
+  attachedFile1 = null;
+  previewImg.src = '';
+  imagePreviewWrap.classList.add('hidden');
+  imageUpload.value = '';
+  promptInput.disabled = false;
+  promptInput.classList.remove('opacity-40', 'cursor-not-allowed');
+}
+
+uploadBtn.addEventListener('click', () => imageUpload.click());
+
+imageUpload.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => setAttachedImage(ev.target.result, file);
+  reader.readAsDataURL(file);
+});
+
+removeImageBtn.addEventListener('click', clearAttachedImage);
+
+async function openCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    cameraFeed.srcObject = cameraStream;
+    cameraModal.classList.remove('hidden');
+  } catch {
+    showError('Camera access denied or not available on this device.');
+  }
+}
+
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  cameraFeed.srcObject = null;
+  cameraModal.classList.add('hidden');
+}
+
+cameraBtn.addEventListener('click', openCamera);
+closeCameraBtn.addEventListener('click', closeCamera);
+cameraModal.addEventListener('click', (e) => { if (e.target === cameraModal) closeCamera(); });
+
+captureBtn.addEventListener('click', () => {
+  const w = cameraFeed.videoWidth  || 640;
+  const h = cameraFeed.videoHeight || 480;
+  cameraCanvas.width  = w;
+  cameraCanvas.height = h;
+  cameraCanvas.getContext('2d').drawImage(cameraFeed, 0, 0, w, h);
+  const dataUrl = cameraCanvas.toDataURL('image/jpeg', 0.85);
+  cameraCanvas.toBlob(blob => setAttachedImage(dataUrl, blob), 'image/jpeg', 0.85);
+  closeCamera();
+});
+

@@ -108,6 +108,30 @@
         <div class="flex justify-end mt-1.5">
           <span id="wordCount" class="font-mono text-[11px] text-steel">0/500</span>
         </div>
+
+        <!-- Image attach row -->
+        <div class="flex items-center gap-2 mt-2.5">
+          <button id="uploadBtn" type="button" class="flex items-center gap-1.5 font-mono text-[11px] text-steel hover:text-ink border border-grid rounded px-2.5 py-1.5 bg-paper hover:bg-surface transition-colors">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 10v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3"/><polyline points="11 5 8 2 5 5"/><line x1="8" y1="2" x2="8" y2="10"/>
+            </svg>
+            Upload image
+          </button>
+          <button id="cameraBtn" type="button" class="flex items-center gap-1.5 font-mono text-[11px] text-steel hover:text-ink border border-grid rounded px-2.5 py-1.5 bg-paper hover:bg-surface transition-colors">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 12a1 1 0 01-1 1H2a1 1 0 01-1-1V6a1 1 0 011-1h2.5l1-2h5l1 2H14a1 1 0 011 1v6z"/><circle cx="8" cy="8.5" r="2.5"/>
+            </svg>
+            Capture
+          </button>
+          <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden">
+          <div id="imagePreviewWrap" class="hidden relative ml-1">
+            <img id="previewImg" class="h-9 rounded border border-grid object-cover" style="max-width:64px" alt="Preview">
+            <button id="removeImageBtn" type="button" title="Remove image"
+              class="absolute -top-1 -right-1 w-4 h-4 bg-orange rounded-full flex items-center justify-center text-white"
+              style="font-size:8px;line-height:1">✕</button>
+          </div>
+        </div>
+
         <div class="flex flex-wrap items-center justify-between gap-3 mt-2 pt-3 border-t border-grid">
           <p class="font-mono text-[11px] text-steel">Describe - Interpret - Validate - Analyze - Visualize</p>
           <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
@@ -160,26 +184,29 @@
         <div class="h-px flex-1 bg-grid"></div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 gap-4">
         <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
-          <div class="flex items-baseline justify-between mb-2">
+          <div class="flex items-baseline justify-between mb-1">
             <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Shear force</h3>
             <span class="font-mono text-[11px] text-steel">kN</span>
           </div>
+          <p id="sfdPeak" class="font-mono text-[10px] text-blue mb-2 hidden"></p>
           <svg id="sfd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
         <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
-          <div class="flex items-baseline justify-between mb-2">
+          <div class="flex items-baseline justify-between mb-1">
             <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Bending moment</h3>
             <span class="font-mono text-[11px] text-steel">kN·m</span>
           </div>
+          <p id="bmdPeak" class="font-mono text-[10px] text-orange mb-2 hidden"></p>
           <svg id="bmd" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
         <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm fade-in">
-          <div class="flex items-baseline justify-between mb-2">
+          <div class="flex items-baseline justify-between mb-1">
             <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em]">Deflection</h3>
             <span class="font-mono text-[11px] text-steel">mm</span>
           </div>
+          <p id="deflPeak" class="font-mono text-[10px] text-teal mb-2 hidden"></p>
           <svg id="defl" viewBox="0 0 600 220" class="w-full h-auto"></svg>
         </div>
       </div>
@@ -197,6 +224,7 @@
           <thead>
             <tr class="bg-paper text-steel uppercase text-[11px] tracking-[0.1em]">
               <th class="text-left px-4 py-2 font-medium">x (m)</th>
+              <th class="text-right px-4 py-2 font-medium">axial (kN)</th>
               <th class="text-right px-4 py-2 font-medium">shear (kN)</th>
               <th class="text-right px-4 py-2 font-medium">moment (kN·m)</th>
               <th class="text-right px-4 py-2 font-medium">deflection (mm)</th>
@@ -215,6 +243,24 @@
 
   </main>
 
+
+<!-- Camera capture modal -->
+<div id="cameraModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(22,36,59,0.65);backdrop-filter:blur(4px)">
+  <div class="bg-surface rounded-lg shadow-xl p-5 w-full max-w-sm mx-4 fade-in">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-display text-sm font-semibold">Capture beam image</h3>
+      <button id="closeCameraBtn" class="font-mono text-[11px] text-steel hover:text-ink transition-colors">✕ close</button>
+    </div>
+    <video id="cameraFeed" class="w-full rounded bg-ink aspect-video object-cover" autoplay playsinline muted></video>
+    <canvas id="cameraCanvas" class="hidden"></canvas>
+    <div class="flex justify-center mt-3">
+      <button id="captureBtn" class="font-display text-sm font-semibold bg-ink text-paper px-6 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
+        Capture
+      </button>
+    </div>
+    <p class="font-mono text-[10px] text-steel text-center mt-2">Point camera at the beam diagram or handwritten notes</p>
+  </div>
+</div>
 
 <script src="analyse.js"></script>
 </body>
