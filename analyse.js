@@ -478,6 +478,7 @@ function render(data){
   renderDiagram('defl', nd.rows.map(r=>({x:r.x, v:r.deflection})),  COLORS.defl, true);
   renderTable(nd.rows);
   renderPeaks(nd);
+  renderDesignResults();
 }
 
 // "run" interaction — fetch analysis from API
@@ -500,6 +501,8 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   document.getElementById('section01').classList.add('hidden');
   document.getElementById('section02').classList.add('hidden');
   document.getElementById('section03').classList.add('hidden');
+  document.getElementById('section04').classList.add('hidden');
+  document.getElementById('section05').classList.add('hidden');
   ['sfdPeak','bmdPeak','deflPeak'].forEach(id => document.getElementById(id).classList.add('hidden'));
 
   try {
@@ -552,8 +555,10 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     // Hide loading state, show results
     document.getElementById('loadingState').classList.add('hidden');
     document.getElementById('section01').classList.remove('hidden');
-    document.getElementById('section02').classList.remove('hidden');
+    document.getElementById('section02').classList.toggle('hidden', analysisMode !== 'design');
     document.getElementById('section03').classList.remove('hidden');
+    document.getElementById('section04').classList.toggle('hidden', analysisMode !== 'design');
+    document.getElementById('section05').classList.remove('hidden');
 
     render(data);
     btn.textContent = original;
@@ -873,6 +878,7 @@ document.getElementById('downloadPdfBtn').addEventListener('click', async () => 
 let attachedImageBase64 = null;
 let attachedFile1 = null;
 let cameraStream = null;
+let analysisMode = 'analysis';
 
 const uploadBtn        = document.getElementById('uploadBtn');
 const cameraBtn        = document.getElementById('cameraBtn');
@@ -952,5 +958,508 @@ captureBtn.addEventListener('click', () => {
   const dataUrl = cameraCanvas.toDataURL('image/jpeg', 0.85);
   cameraCanvas.toBlob(blob => setAttachedImage(dataUrl, blob), 'image/jpeg', 0.85);
   closeCamera();
+});
+
+// ── design settings ───────────────────────────────────────────────────────
+const designSettings = {
+  code:  'BS8110',
+  fck:   30,
+  fyk:   500,
+  cover: 40,
+  bars:  new Set(['T12', 'T16', 'T20']),
+  links: 'T8',
+};
+
+function updateDsSummary() {
+  const yLabel = designSettings.code === 'BS8110' ? 'fy' : 'fyk';
+  const bars   = [...designSettings.bars].sort((a, b) => {
+    const n = s => parseInt(s.replace('T', ''));
+    return n(a) - n(b);
+  }).join(' ');
+  document.getElementById('dsSummary').textContent =
+    `C${designSettings.fck} · ${yLabel} ${designSettings.fyk} · Cover ${designSettings.cover}mm · ${designSettings.code} · ${bars}`;
+  updateChipLabels();
+  renderDesignResults();
+}
+
+function setChipActive(group, activeVal) {
+  document.querySelectorAll(`[data-ds="${group}"]`).forEach(b => {
+    const active   = b.dataset.val === activeVal;
+    const isToggle = b.classList.contains('ds-toggle');
+    b.classList.toggle('bg-ink',     active);
+    b.classList.toggle('text-paper', active);
+    b.classList.toggle('bg-surface', !active && isToggle);
+    b.classList.toggle('bg-paper',   !active && !isToggle);
+    b.classList.toggle('text-ink',   !active && !isToggle);
+    b.classList.toggle('text-steel', !active && isToggle);
+  });
+}
+
+// Toggle collapse / expand
+document.getElementById('designSettingsToggle').addEventListener('click', () => {
+  const panel   = document.getElementById('designSettingsPanel');
+  const chevron = document.getElementById('dsChevron');
+  const opening = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !opening);
+  chevron.style.transform = opening ? 'rotate(180deg)' : '';
+});
+
+// Single-select chips (code, fck, fyk, cover, links)
+document.querySelectorAll('.ds-chip, .ds-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.dataset.ds;
+    const val   = btn.dataset.val;
+
+    if (group === 'fck') {
+      designSettings.fck = Number(val);
+      document.getElementById('dsFckCustom').value = '';
+    } else if (group === 'fyk') {
+      designSettings.fyk = Number(val);
+      document.getElementById('dsFykCustom').value = '';
+    } else if (group === 'cover') {
+      designSettings.cover = Number(val);
+      document.getElementById('dsCoverCustom').value = '';
+    } else {
+      designSettings[group] = val;
+    }
+
+    setChipActive(group, val);
+    updateDsSummary();
+  });
+});
+
+// Multi-select chips (preferred bar sizes)
+document.querySelectorAll('.ds-multi').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const val = btn.dataset.val;
+    if (designSettings.bars.has(val)) {
+      if (designSettings.bars.size > 1) designSettings.bars.delete(val);
+    } else {
+      designSettings.bars.add(val);
+    }
+    const active = designSettings.bars.has(val);
+    btn.classList.toggle('bg-ink',    active);
+    btn.classList.toggle('text-paper', active);
+    btn.classList.toggle('bg-paper',  !active);
+    btn.classList.toggle('text-ink',  !active);
+    updateDsSummary();
+  });
+});
+
+// Custom value inputs
+document.getElementById('dsFckCustom').addEventListener('change', e => {
+  const v = parseFloat(e.target.value);
+  if (v > 0) {
+    designSettings.fck = v;
+    setChipActive('fck', null);
+    updateDsSummary();
+  }
+});
+document.getElementById('dsFykCustom').addEventListener('change', e => {
+  const v = parseFloat(e.target.value);
+  if (v > 0) {
+    designSettings.fyk = v;
+    setChipActive('fyk', null);
+    updateDsSummary();
+  }
+});
+document.getElementById('dsCoverCustom').addEventListener('change', e => {
+  const v = parseFloat(e.target.value);
+  if (v > 0) {
+    designSettings.cover = v;
+    setChipActive('cover', null);
+    updateDsSummary();
+  }
+});
+
+// initialise summary + status line on load
+updateDsSummary();
+
+// ── design results ─────────────────────────────────────────────────────────
+const BAR_AREAS = { T8:50.3, T10:78.5, T12:113.1, T16:201.1, T20:314.2, T25:490.9, T32:804.2 };
+
+function drLine(label, value, pass) {
+  const icon = pass === true  ? ' <span class="text-teal font-semibold">✓</span>'  :
+               pass === false ? ' <span class="text-orange font-semibold">✗</span>' : '';
+  return `<div class="flex items-start gap-2 py-0.5">
+    <span class="text-steel flex-shrink-0" style="min-width:11rem">${label}</span>
+    <span class="text-steel/40">→</span>
+    <span class="text-ink">${value}${icon}</span>
+  </div>`;
+}
+
+function renderDesignResults() {
+  if (!currentAnalysisData) return;
+
+  const b     = Math.max(100, parseInt(document.getElementById('drBeamB').value)  || 300);
+  const h     = Math.max(150, parseInt(document.getElementById('drBeamH').value)  || 500);
+  const cover = designSettings.cover;
+  const linkD = parseInt(designSettings.links.replace('T', ''));
+  const code  = designSettings.code;
+  const fck   = designSettings.fck;
+  const fyk   = designSettings.fyk;
+
+  const sortedBars = [...designSettings.bars]
+    .sort((a, z) => parseInt(z.replace('T','')) - parseInt(a.replace('T','')));
+  const mainBarD = parseInt(sortedBars[0]?.replace('T','') || '16');
+  const d = h - cover - linkD - mainBarD / 2;
+
+  const M_kNm = Math.abs(currentAnalysisData.max_bm) / 1000;
+  const V_kN  = Math.abs(currentAnalysisData.max_sf)  / 1000;
+  const M_Nmm = M_kNm * 1e6;
+  const V_N   = V_kN  * 1e3;
+
+  document.getElementById('drUlsMoment').textContent = `ULS Moment: ${M_kNm.toFixed(1)} kN·m`;
+  document.getElementById('drUlsShear').textContent  = `ULS Shear: ${V_kN.toFixed(1)} kN`;
+
+  // ── Flexural design ──────────────────────────────────────────────────────
+  const K      = M_Nmm / (fck * b * d * d);
+  const Kprime = code === 'BS8110' ? 0.156 : 0.167;
+  const flexLines = [];
+  let z, As_req;
+
+  if (K > Kprime) {
+    z      = 0.775 * d;
+    As_req = M_Nmm / (0.95 * fyk * z);
+    flexLines.push(drLine('K value', `${K.toFixed(3)}  >  ${Kprime} — compression steel needed`, false));
+  } else {
+    z = code === 'BS8110'
+      ? Math.min(d * (0.5 + Math.sqrt(0.25 - K / 0.9)), 0.95 * d)
+      : Math.min(d * 0.5 * (1 + Math.sqrt(1 - 3.53 * K)), 0.95 * d);
+    As_req = M_Nmm / ((code === 'BS8110' ? 0.95 : 0.87) * fyk * z);
+    const zR = z / d;
+    flexLines.push(drLine('K value',     `${K.toFixed(3)}  <  ${Kprime}`, true));
+    flexLines.push(drLine('Lever arm z', Math.abs(zR - 0.95) < 0.001 ? '0.95d' : `${zR.toFixed(3)}d`));
+  }
+  flexLines.unshift(drLine('Required Aₛ', `${Math.ceil(As_req)} mm²`));
+
+  let provided = null;
+  outer: for (const bar of sortedBars) {
+    const area = BAR_AREAS[bar];
+    if (!area) continue;
+    for (let n = 2; n <= 6; n++) {
+      if (n * area >= As_req) { provided = { n, bar, As: n * area }; break outer; }
+    }
+  }
+  if (!provided && sortedBars.length) {
+    const bar = sortedBars[sortedBars.length - 1];
+    const n   = Math.ceil(As_req / BAR_AREAS[bar]);
+    if (n <= 10) provided = { n, bar, As: n * BAR_AREAS[bar] };
+  }
+  if (provided) {
+    flexLines.splice(1, 0, drLine(
+      'Provided',
+      `${provided.n}${provided.bar}  (Aₛ = ${provided.As.toFixed(0)} mm²)`,
+      provided.As >= As_req
+    ));
+  }
+
+  // ── Shear design ─────────────────────────────────────────────────────────
+  const As_prov  = provided ? provided.As : As_req;
+  const v        = V_N / (b * d);
+  const vmax     = Math.min(0.8 * Math.sqrt(fck), 5);
+  const rho100   = Math.min(100 * As_prov / (b * d), 3);
+  const shearLines = [];
+  let vc;
+  if (code === 'BS8110') {
+    vc = 0.79 * Math.pow(rho100, 1/3) * Math.pow(Math.max(400/d, 1), 1/4) / 1.25;
+  } else {
+    const k = Math.min(1 + Math.sqrt(200 / d), 2);
+    vc = 0.12 * k * Math.pow(rho100 * fck, 1/3);
+  }
+  shearLines.push(drLine('Design shear v',
+    code === 'BS8110' ? `${v.toFixed(3)} N/mm²` : `${v.toFixed(3)} N/mm²`));
+  shearLines.push(drLine(code === 'BS8110' ? 'Concrete vc' : 'Concrete vRd,c', `${vc.toFixed(3)} N/mm²`));
+
+  const Asv2 = 2 * Math.PI * (linkD / 2) ** 2;
+  if (v > vmax) {
+    shearLines.push(drLine('Links required',
+      `Section inadequate — v exceeds v_max (${vmax.toFixed(2)} N/mm²)`, false));
+  } else if (v <= (code === 'BS8110' ? vc + 0.4 : vc)) {
+    const sv = Math.min(Math.floor(0.75 * d / 25) * 25, 300);
+    shearLines.push(drLine('Links required', `${designSettings.links} @ ${sv}mm c/c  (minimum)`, true));
+  } else {
+    const Asv_sv = b * (v - vc) / (0.95 * fyk);
+    let sv = Math.floor(Asv2 / Asv_sv / 25) * 25;
+    sv = Math.max(75, Math.min(sv, Math.floor(0.75 * d / 25) * 25, 300));
+    shearLines.push(drLine('Links required', `${designSettings.links} @ ${sv}mm c/c`, true));
+  }
+
+  // ── Deflection check ─────────────────────────────────────────────────────
+  const span_mm      = currentAnalysisData.schema.length * 1000;
+  const actual_ratio = span_mm / d;
+  const fs           = provided ? (2 * fyk * As_req) / (3 * provided.As) : fyk;
+  const Mbd2         = M_Nmm / (b * d * d);
+  const MFt          = Math.min(Math.max(0.55 + (477 - fs) / (120 * (0.9 + Mbd2)), 0.5), 2.0);
+  const allowable    = 20 * MFt;
+  const deflOk       = actual_ratio <= allowable;
+  const deflLines    = [
+    drLine('Span/depth ratio', `${actual_ratio.toFixed(1)}`),
+    drLine('Allowable',        `${allowable.toFixed(1)}`, deflOk),
+  ];
+  if (!deflOk) {
+    deflLines.push(drLine(
+      'Note',
+      `Increase d to ≥ ${Math.ceil(span_mm / allowable)}mm (deeper section or reduce cover)`,
+      false
+    ));
+  }
+
+  document.getElementById('drFlexural').innerHTML   = flexLines.join('');
+  document.getElementById('drShear').innerHTML      = shearLines.join('');
+  document.getElementById('drDeflection').innerHTML = deflLines.join('');
+}
+
+// Recompute when beam section dimensions change
+['drBeamB', 'drBeamH'].forEach(id =>
+  document.getElementById(id).addEventListener('input', renderDesignResults)
+);
+
+// Export calculation sheet PDF
+document.getElementById('exportCalcBtn').addEventListener('click', () => {
+  if (!currentAnalysisData || !window.jspdf) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = doc.internal.pageSize.getWidth();
+  const M = 20, CW = PW - 2 * M;
+  let y = M;
+
+  const mono = 'courier', sans = 'helvetica';
+  const row = (label, value, indent = 0) => {
+    doc.setFont(mono, 'normal').setFontSize(9).setTextColor(94, 112, 129);
+    doc.text(label, M + indent, y);
+    doc.setTextColor(22, 36, 59);
+    doc.text(value, M + indent + 55, y);
+    y += 5.5;
+  };
+  const heading = (txt) => {
+    y += 3;
+    doc.setFont(sans, 'bold').setFontSize(8).setTextColor(94, 112, 129);
+    doc.text(txt.toUpperCase(), M, y);
+    y += 1;
+    doc.setDrawColor(215, 224, 234).setLineWidth(0.3).line(M, y, M + CW, y);
+    y += 5;
+  };
+
+  // Header
+  doc.setFont(sans, 'bold').setFontSize(16).setTextColor(22, 36, 59);
+  doc.text('BeamAi', M, y);
+  doc.setFont(sans, 'normal').setFontSize(9).setTextColor(94, 112, 129);
+  doc.text('Beam Design Calculation Sheet', M + 28, y - 1);
+  doc.text(new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }), PW - M, y, { align:'right' });
+  y += 10;
+  doc.setDrawColor(22, 36, 59).setLineWidth(0.5).line(M, y, M + CW, y);
+  y += 8;
+
+  const b = parseInt(document.getElementById('drBeamB').value) || 300;
+  const h = parseInt(document.getElementById('drBeamH').value) || 500;
+
+  heading('Design Settings');
+  row('Code',            designSettings.code);
+  row('fck / fcu',       `${designSettings.fck} N/mm²`);
+  row('fyk / fy',        `${designSettings.fyk} N/mm²`);
+  row('Nominal cover',   `${designSettings.cover} mm`);
+  row('Preferred bars',  [...designSettings.bars].join(', '));
+  row('Links',           designSettings.links);
+
+  heading('Beam Geometry');
+  row('Width b',   `${b} mm`);
+  row('Depth h',   `${h} mm`);
+  row('Span',      `${currentAnalysisData.schema.length.toFixed(3)} m`);
+
+  heading('ULS Forces');
+  row('Design moment M',  `${(Math.abs(currentAnalysisData.max_bm)/1000).toFixed(3)} kN·m`);
+  row('Design shear V',   `${(Math.abs(currentAnalysisData.max_sf)/1000).toFixed(3)} kN`);
+
+  heading('Flexural Design');
+  document.querySelectorAll('#drFlexural > div').forEach(el => {
+    const spans = el.querySelectorAll('span');
+    if (spans.length >= 2) row(spans[0].textContent, spans[1].textContent);
+  });
+
+  heading('Shear Design');
+  document.querySelectorAll('#drShear > div').forEach(el => {
+    const spans = el.querySelectorAll('span');
+    if (spans.length >= 2) row(spans[0].textContent, spans[1].textContent);
+  });
+
+  heading('Deflection Check');
+  document.querySelectorAll('#drDeflection > div').forEach(el => {
+    const spans = el.querySelectorAll('span');
+    if (spans.length >= 2) row(spans[0].textContent, spans[1].textContent);
+  });
+
+  y += 6;
+  doc.setFont(mono, 'italic').setFontSize(7).setTextColor(150, 160, 170);
+  doc.text('Generated by BeamAi — simplified design to ' + designSettings.code + '. Verify all outputs independently before use.', M, y, { maxWidth: CW });
+
+  doc.save('BeamAi_Calculation.pdf');
+});
+
+// ── analysis / design mode toggle ─────────────────────────────────────────
+function setMode(mode) {
+  analysisMode = mode;
+  const isDesign = mode === 'design';
+
+  // Segmented control styling
+  const btnA = document.getElementById('modeAnalysis');
+  const btnD = document.getElementById('modeDesign');
+  btnA.classList.toggle('bg-ink',    !isDesign);
+  btnA.classList.toggle('text-paper',!isDesign);
+  btnA.classList.toggle('bg-surface', isDesign);
+  btnA.classList.toggle('text-steel', isDesign);
+  btnD.classList.toggle('bg-ink',     isDesign);
+  btnD.classList.toggle('text-paper', isDesign);
+  btnD.classList.toggle('bg-surface',!isDesign);
+  btnD.classList.toggle('text-steel',!isDesign);
+
+  // Show / hide design chips row
+  document.getElementById('dsChipsRow').classList.toggle('hidden', !isDesign);
+
+  // If a result is already shown, immediately update visible sections
+  if (currentAnalysisData) {
+    document.getElementById('section02').classList.toggle('hidden', !isDesign);
+    document.getElementById('section04').classList.toggle('hidden', !isDesign);
+    if (isDesign) renderDesignResults();
+  }
+}
+
+document.getElementById('modeAnalysis').addEventListener('click', () => setMode('analysis'));
+document.getElementById('modeDesign').addEventListener('click',   () => setMode('design'));
+
+// ── how it works toggle ────────────────────────────────────────────────────
+document.getElementById('howItWorksToggle').addEventListener('click', () => {
+  const panel   = document.getElementById('howItWorksPanel');
+  const chevron = document.getElementById('howChevron');
+  const opening = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !opening);
+  chevron.style.transform = opening ? 'rotate(180deg)' : '';
+});
+
+// ── prompt-area design-setting chips (Section 00) ─────────────────────────
+function updateChipLabels() {
+  const fLabel = designSettings.code === 'BS8110' ? 'fcu' : 'fck';
+  const yLabel = designSettings.code === 'BS8110' ? 'fy'  : 'fyk';
+  const bars   = [...designSettings.bars]
+    .sort((a, b) => parseInt(a.replace('T','')) - parseInt(b.replace('T','')))
+    .join(' ');
+
+  const setLabel = (id, text) => {
+    const el = document.getElementById(`dsChipBtn-${id}`);
+    if (el) el.innerHTML = `${text} <span class="text-steel/40 text-[8px]">▾</span>`;
+  };
+  setLabel('code',  designSettings.code);
+  setLabel('fck',   `${fLabel} ${designSettings.fck}`);
+  setLabel('fyk',   `${yLabel} ${designSettings.fyk}`);
+  setLabel('cover', `Cover ${designSettings.cover}mm`);
+  setLabel('bars',  `Bars: ${bars}`);
+  setLabel('links', `Links: ${designSettings.links}`);
+
+  // Active state in grid dropdowns (fck, fyk, cover)
+  ['fck', 'fyk', 'cover'].forEach(group => {
+    const val = String(designSettings[group]);
+    document.querySelectorAll(`#dsDropdown-${group} .chip-dd-opt`).forEach(b => {
+      const active = b.dataset.val === val;
+      b.classList.toggle('bg-ink',    active);
+      b.classList.toggle('text-paper', active);
+      b.classList.toggle('bg-paper',  !active);
+      b.classList.toggle('text-ink',  !active);
+    });
+  });
+  // Active state in list dropdowns (code, links)
+  ['code', 'links'].forEach(group => {
+    const val = designSettings[group];
+    document.querySelectorAll(`#dsDropdown-${group} .chip-dd-opt`).forEach(b => {
+      b.classList.toggle('font-semibold', b.dataset.val === val);
+      b.classList.toggle('text-blue',     b.dataset.val === val);
+    });
+  });
+  // Active state in bars multi-select dropdown
+  document.querySelectorAll('#dsDropdown-bars .chip-dd-multi').forEach(b => {
+    const active = designSettings.bars.has(b.dataset.val);
+    b.classList.toggle('bg-ink',    active);
+    b.classList.toggle('text-paper', active);
+    b.classList.toggle('bg-paper',  !active);
+    b.classList.toggle('text-ink',  !active);
+  });
+}
+
+// Open / close chip dropdowns
+document.querySelectorAll('[id^="dsChipBtn-"]').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const id = btn.id.replace('dsChipBtn-', '');
+    const dd = document.getElementById(`dsDropdown-${id}`);
+    const wasOpen = !dd.classList.contains('hidden');
+    document.querySelectorAll('[id^="dsDropdown-"]').forEach(d => d.classList.add('hidden'));
+    if (!wasOpen) dd.classList.remove('hidden');
+  });
+});
+
+// Clicks inside a dropdown don't close it
+document.querySelectorAll('[id^="dsDropdown-"]').forEach(dd => {
+  dd.addEventListener('click', e => e.stopPropagation());
+});
+
+// Outside click closes all dropdowns
+document.addEventListener('click', () => {
+  document.querySelectorAll('[id^="dsDropdown-"]').forEach(d => d.classList.add('hidden'));
+});
+
+// Single-select options (code, fck, fyk, cover, links)
+document.querySelectorAll('.chip-dd-opt').forEach(opt => {
+  opt.addEventListener('click', e => {
+    e.stopPropagation();
+    const group = opt.dataset.group;
+    const val   = opt.dataset.val;
+
+    if (group === 'fck')   { designSettings.fck   = Number(val); document.getElementById('dsFckCustom').value   = ''; document.querySelector('[data-group-input="fck"]').value   = ''; }
+    else if (group === 'fyk')   { designSettings.fyk   = Number(val); document.getElementById('dsFykCustom').value   = ''; document.querySelector('[data-group-input="fyk"]').value   = ''; }
+    else if (group === 'cover') { designSettings.cover = Number(val); document.getElementById('dsCoverCustom').value = ''; document.querySelector('[data-group-input="cover"]').value = ''; }
+    else                        { designSettings[group] = val; }
+
+    setChipActive(group, val);                                          // sync Section 02 panel
+    document.getElementById(`dsDropdown-${group}`).classList.add('hidden');
+    updateDsSummary();
+  });
+});
+
+// Multi-select options (bars)
+document.querySelectorAll('.chip-dd-multi').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const val = btn.dataset.val;
+    if (designSettings.bars.has(val)) {
+      if (designSettings.bars.size > 1) designSettings.bars.delete(val);
+    } else {
+      designSettings.bars.add(val);
+    }
+    // Sync Section 02 ds-multi buttons
+    const s02 = document.querySelector(`.ds-multi[data-val="${val}"]`);
+    if (s02) {
+      const a = designSettings.bars.has(val);
+      s02.classList.toggle('bg-ink', a); s02.classList.toggle('text-paper', a);
+      s02.classList.toggle('bg-paper', !a); s02.classList.toggle('text-ink', !a);
+    }
+    updateDsSummary();
+  });
+});
+
+// Custom-value inputs (Enter to confirm)
+document.querySelectorAll('[data-group-input]').forEach(inp => {
+  inp.addEventListener('click', e => e.stopPropagation());
+  inp.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const group = inp.dataset.groupInput;
+    const v = parseFloat(inp.value);
+    if (v > 0) {
+      designSettings[group] = v;
+      setChipActive(group, null);
+      const s02 = document.getElementById(`ds${group[0].toUpperCase() + group.slice(1)}Custom`);
+      if (s02) s02.value = inp.value;
+      document.getElementById(`dsDropdown-${group}`).classList.add('hidden');
+      updateDsSummary();
+    }
+  });
 });
 
