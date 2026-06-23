@@ -270,12 +270,46 @@ function renderSchematic(schema){
     svg += `<text x="${sx}" y="${top+45}" text-anchor="middle" font-size="10" fill="#5E7081" font-weight="500">${s.type} · x=${s.position.toFixed(2)}m</text>`;
   });
 
-  // ── 6. Dimension line ─────────────────────────────────────────────────
-  const dimY = 155;
-  svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#5E7081" stroke-width="1"/>`;
-  svg += `<line x1="${x0}" y1="${dimY-5}" x2="${x0}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
-  svg += `<line x1="${x1}" y1="${dimY-5}" x2="${x1}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
-  svg += `<text x="${(x0+x1)/2}" y="${dimY-7}" text-anchor="middle" font-size="11" fill="#5E7081">${L.toFixed(3)} m</text>`;
+  // ── 6. Dimension chain ────────────────────────────────────────────────
+  const segY = 130, dimY = 155;
+
+  // Collect all structurally significant x-positions
+  const keyXSet = new Set([0, L]);
+  schema.supports.forEach(s => keyXSet.add(s.position));
+  schema.point_loads.forEach(pl => keyXSet.add(pl.position));
+  schema.udls.forEach(u => { keyXSet.add(u.start); keyXSet.add(u.end); });
+  (schema.varying_loads || []).forEach(vl => { keyXSet.add(vl.start); keyXSet.add(vl.end); });
+  const keyXs  = [...keyXSet].sort((a, b) => a - b);
+  const keyPxs = keyXs.map(toX);
+  const hasSegments = keyXs.length > 2;
+
+  if (hasSegments) {
+    // Subtle extension lines from each key position down to the segment row
+    keyPxs.forEach(px => {
+      svg += `<line x1="${px}" y1="${beamY+12}" x2="${px}" y2="${segY-5}" stroke="#C8D4DC" stroke-width="0.75" stroke-dasharray="2,2"/>`;
+    });
+    // Segment chain
+    for (let i = 0; i < keyXs.length - 1; i++) {
+      const xa  = keyPxs[i], xb = keyPxs[i + 1];
+      const mid = (xa + xb) / 2;
+      const d   = +(keyXs[i + 1] - keyXs[i]).toFixed(3);
+      svg += `<line x1="${xa}" y1="${segY}" x2="${xb}" y2="${segY}" stroke="#5E7081" stroke-width="1"/>`;
+      svg += `<line x1="${xa}" y1="${segY-4}" x2="${xa}" y2="${segY+4}" stroke="#5E7081" stroke-width="1"/>`;
+      svg += `<line x1="${xb}" y1="${segY-4}" x2="${xb}" y2="${segY+4}" stroke="#5E7081" stroke-width="1"/>`;
+      svg += `<text x="${mid}" y="${segY-6}" text-anchor="middle" font-size="9" fill="#5E7081">${d} m</text>`;
+    }
+    // Overall span below — muted / dashed
+    svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#9BAAB6" stroke-width="1" stroke-dasharray="3,3"/>`;
+    svg += `<line x1="${x0}" y1="${dimY-4}" x2="${x0}" y2="${dimY+4}" stroke="#9BAAB6" stroke-width="1"/>`;
+    svg += `<line x1="${x1}" y1="${dimY-4}" x2="${x1}" y2="${dimY+4}" stroke="#9BAAB6" stroke-width="1"/>`;
+    svg += `<text x="${(x0+x1)/2}" y="${dimY-6}" text-anchor="middle" font-size="10" fill="#9BAAB6">${L.toFixed(3)} m</text>`;
+  } else {
+    // No intermediate key points — single overall dimension
+    svg += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<line x1="${x0}" y1="${dimY-5}" x2="${x0}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<line x1="${x1}" y1="${dimY-5}" x2="${x1}" y2="${dimY+5}" stroke="#5E7081" stroke-width="1"/>`;
+    svg += `<text x="${(x0+x1)/2}" y="${dimY-7}" text-anchor="middle" font-size="11" fill="#5E7081">${L.toFixed(3)} m</text>`;
+  }
 
   const defs = `<defs>
     <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#E8623A"/></marker>
