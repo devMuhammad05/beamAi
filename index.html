@@ -235,6 +235,10 @@
 
   // ── modal controls ───────────────────────────────────────────────────────
   document.getElementById('tryBtn').addEventListener('click', () => {
+    if (localStorage.getItem('beamAi_token')) {
+      window.location.href = 'analyse.html';
+      return;
+    }
     document.getElementById('authModal').classList.add('open');
     tryGooglePrompt();
   });
@@ -302,24 +306,28 @@
 
   // ── analysis count metric ────────────────────────────────────────────────
   async function loadAnalysisCount() {
-    try {
-      const res = await fetch(`${API_BASE}/api/total_beam_analysed`, { signal: AbortSignal.timeout(5000) });
-      if (!res.ok) return;
-      const { total } = await res.json();
-      if (typeof total !== 'number') return;
-      const el = document.getElementById('analysisCount');
-      document.getElementById('analysisMetric').classList.remove('hidden');
-      const duration = 1000;
-      const start = performance.now();
-      const step = (now) => {
-        const progress = Math.min((now - start) / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.floor(eased * total).toLocaleString();
-        if (progress < 1) requestAnimationFrame(step);
-        else el.textContent = total.toLocaleString();
-      };
-      requestAnimationFrame(step);
-    } catch (err) { console.error('[BeamAi] stats fetch failed:', err); }
+    const delays = [0, 3000, 6000]; // immediate, then retry after 3 s and 6 s
+    for (const delay of delays) {
+      if (delay) await new Promise(r => setTimeout(r, delay));
+      try {
+        const res = await fetch(`${API_BASE}/api/total_beam_analysed`, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) continue;
+        const { total } = await res.json();
+        if (typeof total !== 'number') continue;
+        const el = document.getElementById('analysisCount');
+        document.getElementById('analysisMetric').classList.remove('hidden');
+        const start = performance.now();
+        const step = (now) => {
+          const progress = Math.min((now - start) / 1000, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          el.textContent = Math.floor(eased * total).toLocaleString();
+          if (progress < 1) requestAnimationFrame(step);
+          else el.textContent = total.toLocaleString();
+        };
+        requestAnimationFrame(step);
+        return;
+      } catch { /* server still waking — try again */ }
+    }
   }
   loadAnalysisCount();
 

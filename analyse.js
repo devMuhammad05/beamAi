@@ -163,18 +163,18 @@ function renderSchematic(schema){
   schema.udls.forEach((udl, idx) => {
     const sx = toX(udl.start), ex = toX(udl.end);
     const mag = Math.abs(udl.magnitude / 1000);
-    labelItems.push({ x: (sx + ex) / 2, text: `${mag.toFixed(0)} kN/m`, color: '#E8623A', idx, type: 'udl' });
+    labelItems.push({ x: (sx + ex) / 2, text: `${+mag.toFixed(3)} kN/m`, color: '#E8623A', idx, type: 'udl' });
   });
 
   schema.point_loads.forEach((pl, idx) => {
     const mag = Math.abs(pl.magnitude / 1000);
-    labelItems.push({ x: toX(pl.position), text: `${mag.toFixed(0)} kN`, color: '#E8623A', idx, type: 'point' });
+    labelItems.push({ x: toX(pl.position), text: `${+mag.toFixed(3)} kN`, color: '#E8623A', idx, type: 'point' });
   });
 
   (schema.varying_loads || []).forEach((vl, idx) => {
     const sx = toX(vl.start), ex = toX(vl.end);
-    const sM = Math.abs(vl.start_magnitude / 1000).toFixed(0);
-    const eM = Math.abs(vl.end_magnitude / 1000).toFixed(0);
+    const sM = +Math.abs(vl.start_magnitude / 1000).toFixed(3);
+    const eM = +Math.abs(vl.end_magnitude  / 1000).toFixed(3);
     labelItems.push({ x: (sx + ex) / 2, text: `${sM}→${eM} kN/m`, color: '#3B6EA5', idx, type: 'varying' });
   });
 
