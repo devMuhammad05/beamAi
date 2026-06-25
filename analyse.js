@@ -1088,16 +1088,20 @@ function drLine(label, value, pass) {
   </div>`;
 }
 
+let drSupportCond = 'ss'; // 'ss' | 'cont' | 'cant'
+
 function renderDesignResults() {
   if (!currentAnalysisData) return;
 
   const b     = Math.max(100, parseInt(document.getElementById('drBeamB').value)  || 300);
   const h     = Math.max(150, parseInt(document.getElementById('drBeamH').value)  || 500);
+  const fyvEl = document.getElementById('drFyv');
   const cover = designSettings.cover;
   const linkD = parseInt(designSettings.links.replace('T', ''));
   const code  = designSettings.code;
   const fck   = designSettings.fck;
   const fyk   = designSettings.fyk;
+  const fyv   = Math.max(200, parseInt(fyvEl?.value) || 250);
 
   const sortedBars = [...designSettings.bars]
     .sort((a, z) => parseInt(z.replace('T','')) - parseInt(a.replace('T','')));
@@ -1112,95 +1116,121 @@ function renderDesignResults() {
   document.getElementById('drUlsMoment').textContent = `ULS Moment: ${M_kNm.toFixed(1)} kN·m`;
   document.getElementById('drUlsShear').textContent  = `ULS Shear: ${V_kN.toFixed(1)} kN`;
 
-  // ── Flexural design ──────────────────────────────────────────────────────
+  // ── Flexural design (BS8110 / EC2) ───────────────────────────────────────
   const K      = M_Nmm / (fck * b * d * d);
   const Kprime = code === 'BS8110' ? 0.156 : 0.167;
   const flexLines = [];
   let z, As_req;
 
+  flexLines.push(drLine('Section d', `${d.toFixed(0)} mm`));
+  flexLines.push(drLine('K  (K′ = ' + Kprime + ')', K.toFixed(4)));
+
   if (K > Kprime) {
     z      = 0.775 * d;
     As_req = M_Nmm / (0.95 * fyk * z);
-    flexLines.push(drLine('K value', `${K.toFixed(3)}  >  ${Kprime} — compression steel needed`, false));
+    flexLines.push(drLine('K > K′', 'Compression steel required', false));
   } else {
     z = code === 'BS8110'
       ? Math.min(d * (0.5 + Math.sqrt(0.25 - K / 0.9)), 0.95 * d)
       : Math.min(d * 0.5 * (1 + Math.sqrt(1 - 3.53 * K)), 0.95 * d);
     As_req = M_Nmm / ((code === 'BS8110' ? 0.95 : 0.87) * fyk * z);
     const zR = z / d;
-    flexLines.push(drLine('K value',     `${K.toFixed(3)}  <  ${Kprime}`, true));
-    flexLines.push(drLine('Lever arm z', Math.abs(zR - 0.95) < 0.001 ? '0.95d' : `${zR.toFixed(3)}d`));
+    flexLines.push(drLine('Lever arm z', `${z.toFixed(1)} mm  (${Math.abs(zR - 0.95) < 0.001 ? '0.95d' : (zR.toFixed(3) + 'd')})`));
   }
-  flexLines.unshift(drLine('Required Aₛ', `${Math.ceil(As_req)} mm²`));
+
+  // As limits (BS8110 Table 3.25 / EC2 9.2.1)
+  const As_min_pct = code === 'BS8110' ? (fyk <= 250 ? 0.0024 : 0.0013) : Math.max(0.26 * (0.3 * Math.pow(fck, 2/3)) / fyk, 0.0013);
+  const As_min = As_min_pct * b * h;
+  const As_max = 0.04 * b * h;
+
+  flexLines.push(drLine('As req', `${Math.ceil(As_req)} mm²`));
+  flexLines.push(drLine('As min / max', `${Math.ceil(As_min)} / ${Math.floor(As_max)} mm²`));
 
   let provided = null;
   outer: for (const bar of sortedBars) {
     const area = BAR_AREAS[bar];
     if (!area) continue;
-    for (let n = 2; n <= 6; n++) {
+    for (let n = 2; n <= 10; n++) {
       if (n * area >= As_req) { provided = { n, bar, As: n * area }; break outer; }
     }
   }
   if (!provided && sortedBars.length) {
     const bar = sortedBars[sortedBars.length - 1];
     const n   = Math.ceil(As_req / BAR_AREAS[bar]);
-    if (n <= 10) provided = { n, bar, As: n * BAR_AREAS[bar] };
+    provided = { n, bar, As: n * BAR_AREAS[bar] };
   }
   if (provided) {
-    flexLines.splice(1, 0, drLine(
-      'Provided',
-      `${provided.n}${provided.bar}  (Aₛ = ${provided.As.toFixed(0)} mm²)`,
-      provided.As >= As_req
-    ));
+    const barD    = parseInt(provided.bar.replace('T',''));
+    const clrSpc  = (b - 2*(cover + linkD) - provided.n * barD) / (provided.n - 1);
+    const clrOk   = clrSpc >= Math.max(barD, 25);
+    const provOk  = provided.As >= As_req && provided.As <= As_max;
+    flexLines.push(drLine('Provided', `${provided.n}${provided.bar}  →  Aₛ = ${provided.As.toFixed(0)} mm²`, provOk));
+    if (provided.n > 1) {
+      flexLines.push(drLine('Clear spacing', `${clrSpc.toFixed(1)} mm`, clrOk));
+    }
   }
 
   // ── Shear design ─────────────────────────────────────────────────────────
   const As_prov  = provided ? provided.As : As_req;
   const v        = V_N / (b * d);
-  const vmax     = Math.min(0.8 * Math.sqrt(fck), 5);
+  const vmax     = code === 'BS8110' ? Math.min(0.8 * Math.sqrt(fck), 5) : Math.min(0.2 * fck, 5);
   const rho100   = Math.min(100 * As_prov / (b * d), 3);
+  const Asvleg   = Math.PI * (linkD / 2) ** 2;
+  const Asv2     = 2 * Asvleg;
   const shearLines = [];
   let vc;
+
   if (code === 'BS8110') {
-    vc = 0.79 * Math.pow(rho100, 1/3) * Math.pow(Math.max(400/d, 1), 1/4) / 1.25;
+    const fcu_factor = fck > 25 ? Math.pow(fck / 25, 1/3) : 1;
+    vc = 0.79 * Math.pow(rho100, 1/3) * Math.pow(Math.max(400 / d, 1), 1/4) * fcu_factor / 1.25;
   } else {
     const k = Math.min(1 + Math.sqrt(200 / d), 2);
     vc = 0.12 * k * Math.pow(rho100 * fck, 1/3);
   }
-  shearLines.push(drLine('Design shear v',
-    code === 'BS8110' ? `${v.toFixed(3)} N/mm²` : `${v.toFixed(3)} N/mm²`));
-  shearLines.push(drLine(code === 'BS8110' ? 'Concrete vc' : 'Concrete vRd,c', `${vc.toFixed(3)} N/mm²`));
 
-  const Asv2 = 2 * Math.PI * (linkD / 2) ** 2;
+  shearLines.push(drLine('v  (v_max = ' + vmax.toFixed(2) + ')', `${v.toFixed(3)} N/mm²`, v <= vmax));
+  shearLines.push(drLine(code === 'BS8110' ? 'vc' : 'vRd,c', `${vc.toFixed(3)} N/mm²`));
+
   if (v > vmax) {
-    shearLines.push(drLine('Links required',
-      `Section inadequate — v exceeds v_max (${vmax.toFixed(2)} N/mm²)`, false));
+    shearLines.push(drLine('Links', 'Section inadequate — v > v_max', false));
   } else if (v <= (code === 'BS8110' ? vc + 0.4 : vc)) {
-    const sv = Math.min(Math.floor(0.75 * d / 25) * 25, 300);
-    shearLines.push(drLine('Links required', `${designSettings.links} @ ${sv}mm c/c  (minimum)`, true));
+    // Minimum links
+    const AsvSv_min = code === 'BS8110'
+      ? (0.4 * b) / (0.95 * fyv)
+      : (0.08 * Math.sqrt(fck) / fyv) * b;
+    const sv_max  = Math.min(Math.floor(0.75 * d / 25) * 25, 300);
+    const sv_prov = Math.min(Math.floor(Asv2 / AsvSv_min / 25) * 25, sv_max);
+    const AsvSv_prov = Asv2 / sv_prov;
+    shearLines.push(drLine('Asv/sv  req (min)', `${AsvSv_min.toFixed(3)} mm²/mm`));
+    shearLines.push(drLine('Links', `${designSettings.links} @ ${sv_prov}mm  →  ${AsvSv_prov.toFixed(3)} mm²/mm`, true));
   } else {
-    const Asv_sv = b * (v - vc) / (0.95 * fyk);
-    let sv = Math.floor(Asv2 / Asv_sv / 25) * 25;
+    // Designed links
+    const AsvSv_req = b * (v - vc) / (0.95 * fyv);
+    let sv = Math.floor(Asv2 / AsvSv_req / 25) * 25;
     sv = Math.max(75, Math.min(sv, Math.floor(0.75 * d / 25) * 25, 300));
-    shearLines.push(drLine('Links required', `${designSettings.links} @ ${sv}mm c/c`, true));
+    const AsvSv_prov = Asv2 / sv;
+    shearLines.push(drLine('Asv/sv  req', `${AsvSv_req.toFixed(3)} mm²/mm`));
+    shearLines.push(drLine('Links', `${designSettings.links} @ ${sv}mm  →  ${AsvSv_prov.toFixed(3)} mm²/mm`, AsvSv_prov >= AsvSv_req));
   }
 
-  // ── Deflection check ─────────────────────────────────────────────────────
+  // ── Deflection check (BS8110 cl 3.4.6 / EC2 7.4) ────────────────────────
+  const basicRatio = { ss: 20, cont: 26, cant: 7 }[drSupportCond] ?? 20;
   const span_mm      = currentAnalysisData.schema.length * 1000;
   const actual_ratio = span_mm / d;
   const fs           = provided ? (2 * fyk * As_req) / (3 * provided.As) : fyk;
   const Mbd2         = M_Nmm / (b * d * d);
   const MFt          = Math.min(Math.max(0.55 + (477 - fs) / (120 * (0.9 + Mbd2)), 0.5), 2.0);
-  const allowable    = 20 * MFt;
+  const allowable    = basicRatio * MFt;
   const deflOk       = actual_ratio <= allowable;
   const deflLines    = [
-    drLine('Span/depth ratio', `${actual_ratio.toFixed(1)}`),
-    drLine('Allowable',        `${allowable.toFixed(1)}`, deflOk),
+    drLine('Basic ratio', `${basicRatio}  (MFt = ${MFt.toFixed(3)})`),
+    drLine('Allowable span/d', `${allowable.toFixed(2)}`),
+    drLine('Actual span/d', `${actual_ratio.toFixed(2)}`, deflOk),
   ];
   if (!deflOk) {
     deflLines.push(drLine(
       'Note',
-      `Increase d to ≥ ${Math.ceil(span_mm / allowable)}mm (deeper section or reduce cover)`,
+      `Increase d to ≥ ${Math.ceil(span_mm / allowable)} mm`,
       false
     ));
   }
@@ -1210,9 +1240,27 @@ function renderDesignResults() {
   document.getElementById('drDeflection').innerHTML = deflLines.join('');
 }
 
-// Recompute when beam section dimensions change
-['drBeamB', 'drBeamH'].forEach(id =>
-  document.getElementById(id).addEventListener('input', renderDesignResults)
+// Support condition toggle
+function setDrSupport(cond) {
+  drSupportCond = cond;
+  const map = { ss: 'drSuppSS', cont: 'drSuppCont', cant: 'drSuppCant' };
+  Object.entries(map).forEach(([k, id]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.classList.toggle('bg-ink',    k === cond);
+    btn.classList.toggle('text-paper',k === cond);
+    btn.classList.toggle('bg-surface',k !== cond);
+    btn.classList.toggle('text-steel',k !== cond);
+  });
+  renderDesignResults();
+}
+document.getElementById('drSuppSS')  ?.addEventListener('click', () => setDrSupport('ss'));
+document.getElementById('drSuppCont')?.addEventListener('click', () => setDrSupport('cont'));
+document.getElementById('drSuppCant')?.addEventListener('click', () => setDrSupport('cant'));
+
+// Recompute when beam section dimensions or fyv change
+['drBeamB', 'drBeamH', 'drFyv'].forEach(id =>
+  document.getElementById(id)?.addEventListener('input', renderDesignResults)
 );
 
 // Export calculation sheet PDF

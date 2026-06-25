@@ -485,7 +485,7 @@
       </div>
 
       <!-- Beam section inputs -->
-      <div class="flex items-center gap-4 mb-3">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
         <span class="font-mono text-[10px] text-steel uppercase tracking-[0.12em]">Section</span>
         <label class="flex items-center gap-1.5 font-mono text-[11px] text-steel">
           b <input id="drBeamB" type="number" value="300" min="100" max="1000" step="25"
@@ -496,6 +496,18 @@
           h <input id="drBeamH" type="number" value="500" min="150" max="2000" step="25"
             class="w-16 px-2 py-1 rounded border border-grid bg-surface text-ink focus:outline-none focus:border-blue/60 font-mono text-[11px]"> mm
         </label>
+        <span class="font-mono text-[11px] text-grid">·</span>
+        <label class="flex items-center gap-1.5 font-mono text-[11px] text-steel">
+          fyv <input id="drFyv" type="number" value="250" min="200" max="600" step="10"
+            class="w-16 px-2 py-1 rounded border border-grid bg-surface text-ink focus:outline-none focus:border-blue/60 font-mono text-[11px]"> N/mm²
+        </label>
+        <span class="font-mono text-[11px] text-grid">·</span>
+        <span class="font-mono text-[10px] text-steel uppercase tracking-[0.12em]">Support</span>
+        <div class="inline-flex rounded border border-grid overflow-hidden" role="group">
+          <button id="drSuppSS"   class="font-mono text-[11px] px-2.5 py-1 bg-ink text-paper transition-colors">SS</button>
+          <button id="drSuppCont" class="font-mono text-[11px] px-2.5 py-1 bg-surface text-steel hover:text-ink transition-colors">Cont.</button>
+          <button id="drSuppCant" class="font-mono text-[11px] px-2.5 py-1 bg-surface text-steel hover:text-ink transition-colors">Cant.</button>
+        </div>
       </div>
 
       <div class="bg-surface border border-grid rounded-lg shadow-sm overflow-hidden">
