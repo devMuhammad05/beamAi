@@ -1182,42 +1182,29 @@ document.getElementById('drSuppSS')  ?.addEventListener('click', () => setDrSupp
 document.getElementById('drSuppCont')?.addEventListener('click', () => setDrSupport('cont'));
 document.getElementById('drSuppCant')?.addEventListener('click', () => setDrSupport('cant'));
 
-// Recompute when beam section dimensions or fyv change
+// Invalidate cached server result when section dimensions or fyv change.
+// User must click "Design beam" again to recompute on the server — no auto-rerun.
 ['drBeamB', 'drBeamH', 'drFyv'].forEach(id =>
   document.getElementById(id)?.addEventListener('input', () => {
     currentDesignApiData = null;
     renderDesignResults();
-    if (analysisMode === 'design' && lastRunPrompt) {
-      clearTimeout(designRerunTimer);
-      designRerunTimer = setTimeout(async () => {
-        try {
-          const data = await callDesignApi(lastRunPrompt);
-          currentDesignApiData = data;
-          renderDesignResultsFromApi(data);
-        } catch { /* keep client-side result */ }
-      }, 800);
-    }
   })
 );
 
 // Export calculation sheet PDF — backend-generated, on-demand
 document.getElementById('exportCalcBtn').addEventListener('click', async () => {
+  const designId = currentDesignApiData?.design_id;
+  if (!designId) {
+    showError(lastRunPrompt
+      ? 'Settings changed since last run — click Design beam to recompute, then download.'
+      : 'Run a design first to generate a calculation report.');
+    return;
+  }
   const btn = document.getElementById('exportCalcBtn');
   const original = btn.innerHTML;
   btn.textContent = 'Generating…';
   btn.disabled = true;
   try {
-    let designId = currentDesignApiData?.design_id;
-    if (!designId) {
-      if (!lastRunPrompt) {
-        showError('Run a design first to generate a calculation report.');
-        return;
-      }
-      const data = await callDesignApi(lastRunPrompt);
-      currentDesignApiData = data;
-      designId = data.design_id;
-      if (!designId) throw new Error('Design response missing design_id');
-    }
     const res = await fetch(`${API_BASE}/api/design/${designId}/report`, {
       headers: authHeaders(),
     });
