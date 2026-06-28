@@ -181,7 +181,7 @@
                   <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">Design Code</p>
                   <div class="inline-flex rounded border border-grid overflow-hidden">
                     <button data-ds="code" data-val="BS8110" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-ink text-paper transition-colors">BS8110</button>
-                    <button disabled title="EC2 support coming soon" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel/30 cursor-not-allowed">EC2 <span class="text-[9px] normal-case tracking-normal opacity-60">soon</span></button>
+                    <button data-ds="code" data-val="EC2" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel transition-colors">EC2</button>
                   </div>
                 </div>
                 <div>
@@ -393,6 +393,24 @@
           <button id="drSuppSS"   class="font-mono text-[11px] px-2.5 py-1 bg-ink text-paper transition-colors">SS</button>
           <button id="drSuppCont" class="font-mono text-[11px] px-2.5 py-1 bg-surface text-steel hover:text-ink transition-colors">Cont.</button>
           <button id="drSuppCant" class="font-mono text-[11px] px-2.5 py-1 bg-surface text-steel hover:text-ink transition-colors">Cant.</button>
+        </div>
+      </div>
+
+      <!-- Reinforcement schedule (primary output) -->
+      <div class="mb-4 rounded-lg border border-ink/15 bg-ink shadow-sm overflow-hidden">
+        <div class="px-5 py-2.5 flex items-center gap-2 border-b border-white/10">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#F5A623" stroke-width="1.6" stroke-linecap="round"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="12" r="2"/></svg>
+          <h3 class="font-display text-xs font-semibold uppercase tracking-[0.18em] text-amber">Reinforcement schedule</h3>
+        </div>
+        <div id="drRebarSchedule" class="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-white/10"></div>
+      </div>
+
+      <!-- Reinforcement detailing -->
+      <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm mb-4 fade-in">
+        <h3 class="font-display text-xs font-semibold uppercase tracking-[0.15em] mb-3 text-steel">Reinforcement detailing</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-4 items-center">
+          <svg id="rebarSection"   viewBox="0 0 240 300" class="w-full h-auto"></svg>
+          <svg id="rebarElevation" viewBox="0 0 600 300" class="w-full h-auto"></svg>
         </div>
       </div>
 

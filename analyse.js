@@ -815,6 +815,13 @@ document.getElementById('dsCoverCustom').addEventListener('change', e => {
 
 // ── design API helpers ────────────────────────────────────────────────────
 
+// EN 206 standard concrete classes: characteristic cube strength -> cylinder fck.
+const _CUBE_TO_CYLINDER = { 15:12, 20:16, 25:20, 30:25, 35:28, 37:30, 40:32, 45:35, 50:40, 55:45, 60:50 };
+function cubeToCylinder(fcu) {
+  const key = Math.round(fcu);
+  return _CUBE_TO_CYLINDER[key] ?? Math.round(0.8 * fcu * 10) / 10;
+}
+
 function showDesignLoading(loading) {
   const placeholder = '<div class="font-mono text-[11px] text-steel/60 py-1 animate-pulse">Computing…</div>';
   ['drFlexural', 'drShear', 'drDeflection'].forEach(id => {
@@ -829,7 +836,7 @@ async function callDesignApi(prompt) {
 
   const augPrompt = `${prompt}, section ${b}mm wide × ${h}mm deep`;
   const settings = {
-    design_code: 'bs8110',
+    design_code: designSettings.code === 'EC2' ? 'ec2' : 'bs8110',
     fcu:         designSettings.fck,
     fy:          designSettings.fyk,
     fyv,
@@ -862,7 +869,7 @@ function syncSettingsFromDesignResponse(data) {
 
   // ── Design code ─────────────────────────────────────────────────────────
   if (s.design_code) {
-    const code = 'BS8110'; // EC2 not yet supported
+    const code = String(s.design_code).toLowerCase().startsWith('ec') ? 'EC2' : 'BS8110';
     designSettings.code = code;
     setChipActive('code', code);
   }
@@ -997,6 +1004,181 @@ function renderDesignResultsFromApi(data) {
   document.getElementById('drFlexural').innerHTML   = flexLines.join('');
   document.getElementById('drShear').innerHTML      = shearLines.join('');
   document.getElementById('drDeflection').innerHTML = deflLines.join('');
+
+  // Reinforcement schedule (primary output)
+  const tensionOk = rf.tension
+    ? (rf.tension.As_prov_mm2 >= fl.As_req_mm2 && rf.tension.As_prov_mm2 <= fl.As_max_mm2 && rf.tension.spacing_ok !== false)
+    : null;
+  renderRebarSchedule([
+    rf.tension && rebarCard('Tension steel', rf.tension.label,
+      `Aₛ = ${rf.tension.As_prov_mm2.toFixed(0)} mm²  (req ${Math.ceil(fl.As_req_mm2)})`, tensionOk),
+    rf.compression
+      ? rebarCard('Compression steel', rf.compression.label,
+          `As₂ = ${rf.compression.As_prov_mm2.toFixed(0)} mm²  (req ${Math.ceil(fl.As2_req_mm2)})`, null)
+      : rebarCard('Compression steel', 'None', 'Singly reinforced', null, true),
+    rf.links && rebarCard('Shear links', rf.links.label,
+      `${rf.links.Asv_sv_prov_mm2mm.toFixed(3)} mm²/mm  (req ${sh.Asv_sv_req_mm2mm.toFixed(3)})`,
+      rf.links.Asv_sv_prov_mm2mm >= sh.Asv_sv_req_mm2mm),
+  ]);
+
+  const cover = data.parsed_input?.section?.cover ?? data.applied_settings?.cover ?? 30;
+  const spanM = +data.parsed_input?.length || (currentAnalysisData?.schema?.length ?? 0);
+  renderRebarDetail(sc, rf, cover, spanM);
+}
+
+// Build one reinforcement card. ok: true=pass, false=fail, null=neutral. muted=dim style.
+function rebarCard(title, value, sub, ok, muted = false) {
+  const badge = ok === true
+    ? '<span class="text-teal text-[11px] font-semibold">✓ OK</span>'
+    : ok === false
+    ? '<span class="text-orange text-[11px] font-semibold">✗ check</span>'
+    : '';
+  const valColor = muted ? 'text-white/35' : 'text-white';
+  return `<div class="px-5 py-4">
+    <div class="flex items-center justify-between mb-1">
+      <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-white/45">${title}</span>
+      ${badge}
+    </div>
+    <div class="font-display text-2xl font-bold leading-tight ${valColor}">${value}</div>
+    <div class="font-mono text-[11px] text-white/55 mt-1">${sub}</div>
+  </div>`;
+}
+
+function renderRebarSchedule(cards) {
+  const el = document.getElementById('drRebarSchedule');
+  if (el) el.innerHTML = cards.filter(Boolean).join('');
+}
+
+// ── reinforcement detailing drawing (schematic cross-section + elevation) ────
+const REBAR_COLORS = {
+  ink:'#16243B', steel:'#5E7081', grid:'#D7E0EA',
+  tension:'#3B6EA5', compression:'#E8623A', link:'#F5A623',
+};
+
+function renderRebarDetail(section, reinforcement, cover, spanM) {
+  const secEl = document.getElementById('rebarSection');
+  const elevEl = document.getElementById('rebarElevation');
+  if (!secEl || !elevEl) return;
+  if (!section || !reinforcement) { secEl.innerHTML = ''; elevEl.innerHTML = ''; return; }
+
+  const b = +section.b_mm, h = +section.h_mm, d = +section.d_mm;
+  const cov = +cover || 30;
+  const t = reinforcement.tension || null;
+  const c = reinforcement.compression || null;
+  const lnk = reinforcement.links || null;
+  const C = REBAR_COLORS;
+
+  // ── Cross-section (240×300) ────────────────────────────────────────────
+  {
+    const W = 240, H = 300;
+    const padX = 46, padTop = 30, padBot = 44;
+    const availW = W - 2 * padX, availH = H - padTop - padBot;
+    const scale = Math.min(availW / b, availH / h);
+    const rw = b * scale, rh = h * scale;
+    const rx = (W - rw) / 2, ry = padTop;
+    // visual cover inset (mm scaled, clamped so bars stay legible)
+    const inset = Math.max(8, Math.min(cov * scale, 18));
+    const barR = 4.5;
+    const txt = (x, y, s, opts = '') => `<text x="${x}" y="${y}" font-size="9" fill="${C.steel}" ${opts}>${s}</text>`;
+
+    let s = '';
+    // concrete outline
+    s += `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${C.ink}" stroke-width="1.6"/>`;
+    // links rectangle (stirrup)
+    const lx = rx + inset, ly = ry + inset, lw = rw - 2 * inset, lh = rh - 2 * inset;
+    s += `<rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" rx="4" fill="none" stroke="${C.link}" stroke-width="1.4"/>`;
+
+    const rowBars = (n, color, yPos) => {
+      let g = '';
+      if (n <= 1) {
+        g += `<circle cx="${rx + rw / 2}" cy="${yPos}" r="${barR}" fill="${color}"/>`;
+        return g;
+      }
+      for (let i = 0; i < n; i++) {
+        const cx = lx + barR + (lw - 2 * barR) * (i / (n - 1));
+        g += `<circle cx="${cx}" cy="${yPos}" r="${barR}" fill="${color}"/>`;
+      }
+      return g;
+    };
+
+    // tension bars (bottom)
+    const tY = ly + lh - barR - 1;
+    const nT = t ? t.n_bars || 0 : 0;
+    if (nT > 0) s += rowBars(nT, C.tension, tY);
+    // compression bars (top) or nominal hangers
+    const cY = ly + barR + 1;
+    if (c && c.n_bars > 0) {
+      s += rowBars(c.n_bars, C.compression, cY);
+    } else {
+      // 2 nominal hanger bars, dimmed
+      s += `<circle cx="${lx + barR + 1}" cy="${cY}" r="${barR - 1}" fill="none" stroke="${C.steel}" stroke-width="1" stroke-dasharray="2 1.5"/>`;
+      s += `<circle cx="${lx + lw - barR - 1}" cy="${cY}" r="${barR - 1}" fill="none" stroke="${C.steel}" stroke-width="1" stroke-dasharray="2 1.5"/>`;
+    }
+
+    // callouts
+    const tensionColor = (t && t.spacing_ok === false) ? C.compression : C.tension;
+    if (t) s += `<text x="${W / 2}" y="${ry + rh + 18}" font-size="10" font-weight="bold" fill="${tensionColor}" text-anchor="middle">${t.label}</text>`;
+    if (c && c.label) s += `<text x="${W / 2}" y="${ry - 14}" font-size="10" font-weight="bold" fill="${C.compression}" text-anchor="middle">${c.label}</text>`;
+    if (lnk) s += `<text x="${rx + rw + 4}" y="${ry + 10}" font-size="9" fill="${C.link}" font-weight="bold">${lnk.label}</text>`;
+
+    // dimensions: b (bottom), h & d (left)
+    s += txt(W / 2, ry + rh + 32, `b = ${Math.round(b)} mm`, `text-anchor="middle"`);
+    s += `<text x="${rx - 8}" y="${ry + rh / 2}" font-size="9" fill="${C.steel}" text-anchor="middle" transform="rotate(-90 ${rx - 8} ${ry + rh / 2})">h = ${Math.round(h)} · d = ${Math.round(d)} mm</text>`;
+
+    secEl.innerHTML = s;
+  }
+
+  // ── Elevation (600×300): side view of the beam ─────────────────────────
+  {
+    const W = 600;
+    const x0 = 40, x1 = 560, top = 70, bh = 130;  // beam band
+    const bot = top + bh;
+    const span = +spanM || 0;
+    const inset = 18;            // cover band inside the beam outline
+    const barY_t = bot - inset;  // tension bars near bottom
+    const barY_c = top + inset;  // compression bars near top
+
+    let s = '';
+    // beam outline
+    s += `<rect x="${x0}" y="${top}" width="${x1 - x0}" height="${bh}" fill="none" stroke="${C.ink}" stroke-width="1.6"/>`;
+
+    // ── stirrups: a few representative links (schematic, not the real count) ─
+    const nLinks = lnk ? 6 : 0;
+    const linkTop = barY_c, linkBot = barY_t, linkH = linkBot - linkTop;
+    for (let i = 0; i < nLinks; i++) {
+      const x = x0 + inset + (x1 - x0 - 2 * inset) * (i / (nLinks - 1));
+      // a slim closed rectangle = one stirrup wrapping top & bottom bars
+      s += `<rect x="${x - 3}" y="${linkTop}" width="6" height="${linkH}" rx="2.5" fill="none" stroke="${C.link}" stroke-width="1.3"/>`;
+    }
+
+    // ── longitudinal bars with end hooks (drawn over stirrups) ─────────────
+    const drawBar = (yPos, color, hookUp) => {
+      const hx0 = x0 + inset, hx1 = x1 - inset;
+      const hd = hookUp ? -13 : 13;
+      let g = `<line x1="${hx0}" y1="${yPos}" x2="${hx1}" y2="${yPos}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+      g += `<line x1="${hx0}" y1="${yPos}" x2="${hx0}" y2="${yPos + hd}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+      g += `<line x1="${hx1}" y1="${yPos}" x2="${hx1}" y2="${yPos + hd}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
+      return g;
+    };
+    if (t) s += drawBar(barY_t, (t.spacing_ok === false ? C.compression : C.tension), true);
+    if (c) s += drawBar(barY_c, C.compression, false);
+
+    // ── labels ─────────────────────────────────────────────────────────────
+    if (t) s += `<text x="${x0 + 6}" y="${barY_t + 18}" font-size="11" font-weight="bold" fill="${(t.spacing_ok === false) ? C.compression : C.tension}">${t.label}  (bottom / tension)</text>`;
+    if (c) s += `<text x="${x0 + 6}" y="${barY_c - 9}" font-size="11" font-weight="bold" fill="${C.compression}">${c.label}  (top / compression)</text>`;
+    if (lnk) s += `<text x="${x1 - 4}" y="${top - 10}" font-size="11" font-weight="bold" fill="${C.link}" text-anchor="end">Links ${lnk.label}</text>`;
+    // schematic note
+    s += `<text x="${x0}" y="${top - 10}" font-size="9" fill="${C.steel}">Side elevation — spacing shown schematically</text>`;
+
+    // ── span dimension line ────────────────────────────────────────────────
+    const dimY = bot + 30;
+    s += `<line x1="${x0}" y1="${dimY}" x2="${x1}" y2="${dimY}" stroke="${C.steel}" stroke-width="1"/>`;
+    s += `<line x1="${x0}" y1="${dimY - 5}" x2="${x0}" y2="${dimY + 5}" stroke="${C.steel}" stroke-width="1"/>`;
+    s += `<line x1="${x1}" y1="${dimY - 5}" x2="${x1}" y2="${dimY + 5}" stroke="${C.steel}" stroke-width="1"/>`;
+    s += `<text x="${W / 2}" y="${dimY - 6}" font-size="11" fill="${C.steel}" text-anchor="middle">${span > 0 ? `Span = ${span.toFixed(2)} m` : 'Beam span'}</text>`;
+
+    elevEl.innerHTML = s;
+  }
 }
 
 // ── design results ─────────────────────────────────────────────────────────
@@ -1024,7 +1206,8 @@ function renderDesignResults() {
   const cover = designSettings.cover;
   const linkD = parseInt(designSettings.links.replace('T', ''));
   const code  = designSettings.code;
-  const fck   = designSettings.fck;
+  // EC2 design uses the cylinder strength fck; the grade chip is cube-based, so convert.
+  const fck   = code === 'EC2' ? cubeToCylinder(designSettings.fck) : designSettings.fck;
   const fyk   = designSettings.fyk;
   const fyv   = Math.max(200, parseInt(fyvEl?.value) || 250);
 
@@ -1104,6 +1287,7 @@ function renderDesignResults() {
   const Asv2     = 2 * Asvleg;
   const shearLines = [];
   let vc;
+  let linkSummary = null;
 
   if (code === 'BS8110') {
     const fcu_factor = fck > 25 ? Math.pow(fck / 25, 1/3) : 1;
@@ -1118,6 +1302,7 @@ function renderDesignResults() {
 
   if (v > vmax) {
     shearLines.push(drLine('Links', 'Section inadequate — v > v_max', false));
+    linkSummary = { label: 'Inadequate', prov: 0, req: 0, ok: false };
   } else if (v <= (code === 'BS8110' ? vc + 0.4 : vc)) {
     // Minimum links
     const AsvSv_min = code === 'BS8110'
@@ -1128,6 +1313,7 @@ function renderDesignResults() {
     const AsvSv_prov = Asv2 / sv_prov;
     shearLines.push(drLine('Asv/sv  req (min)', `${AsvSv_min.toFixed(3)} mm²/mm`));
     shearLines.push(drLine('Links', `${designSettings.links} @ ${sv_prov}mm  →  ${AsvSv_prov.toFixed(3)} mm²/mm`, true));
+    linkSummary = { label: `${designSettings.links}@${sv_prov}`, prov: AsvSv_prov, req: AsvSv_min, ok: true };
   } else {
     // Designed links
     const AsvSv_req = b * (v - vc) / (0.95 * fyv);
@@ -1136,6 +1322,7 @@ function renderDesignResults() {
     const AsvSv_prov = Asv2 / sv;
     shearLines.push(drLine('Asv/sv  req', `${AsvSv_req.toFixed(3)} mm²/mm`));
     shearLines.push(drLine('Links', `${designSettings.links} @ ${sv}mm  →  ${AsvSv_prov.toFixed(3)} mm²/mm`, AsvSv_prov >= AsvSv_req));
+    linkSummary = { label: `${designSettings.links}@${sv}`, prov: AsvSv_prov, req: AsvSv_req, ok: AsvSv_prov >= AsvSv_req };
   }
 
   // ── Deflection check (BS8110 cl 3.4.6 / EC2 7.4) ────────────────────────
@@ -1163,6 +1350,33 @@ function renderDesignResults() {
   document.getElementById('drFlexural').innerHTML   = flexLines.join('');
   document.getElementById('drShear').innerHTML      = shearLines.join('');
   document.getElementById('drDeflection').innerHTML = deflLines.join('');
+
+  // Reinforcement schedule (primary output)
+  const doubly = K > Kprime;
+  renderRebarSchedule([
+    provided && rebarCard('Tension steel', `${provided.n}${provided.bar}`,
+      `Aₛ = ${provided.As.toFixed(0)} mm²  (req ${Math.ceil(As_req)})`,
+      provided.As >= As_req && provided.As <= As_max),
+    doubly
+      ? rebarCard('Compression steel', 'Required', 'K > K′ — see calc', null)
+      : rebarCard('Compression steel', 'None', 'Singly reinforced', null, true),
+    linkSummary && rebarCard('Shear links', linkSummary.label,
+      `${linkSummary.prov.toFixed(3)} mm²/mm  (req ${linkSummary.req.toFixed(3)})`, linkSummary.ok),
+  ]);
+
+  // Detailing drawing (build response-shaped objects from local values)
+  const detailRf = {
+    tension: provided ? {
+      n_bars: provided.n,
+      bar_dia_mm: parseInt(provided.bar.replace('T', '')),
+      label: `${provided.n}${provided.bar}`,
+      spacing_ok: provided.As >= As_req && provided.As <= As_max,
+    } : null,
+    compression: null,
+    links: linkSummary ? { label: linkSummary.label } : null,
+  };
+  const spanM = currentAnalysisData?.schema?.length ?? 0;
+  renderRebarDetail({ b_mm: b, h_mm: h, d_mm: d }, detailRf, cover, spanM);
 }
 
 // Support condition toggle
