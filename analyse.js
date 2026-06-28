@@ -512,6 +512,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
       const designData = await callDesignApi(promptText);
       console.log('design response:', designData);
       currentDesignApiData = designData;
+      if (designData.design_id) lastDesignId = designData.design_id;
       document.getElementById('loadingState').classList.add('hidden');
       document.getElementById('section04').classList.remove('hidden');
       syncSettingsFromDesignResponse(designData);
@@ -599,6 +600,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
 // PDF download functionality
 let currentAnalysisData = null;
 let currentDesignApiData = null;
+let lastDesignId = null;       // id of the last design saved to the DB — survives UI tweaks
 let lastRunPrompt = '';
 let designRerunTimer = null;
 
@@ -1193,11 +1195,9 @@ document.getElementById('drSuppCant')?.addEventListener('click', () => setDrSupp
 
 // Export calculation sheet PDF — backend-generated, on-demand
 document.getElementById('exportCalcBtn').addEventListener('click', async () => {
-  const designId = currentDesignApiData?.design_id;
+  const designId = lastDesignId;
   if (!designId) {
-    showError(lastRunPrompt
-      ? 'Settings changed since last run — click Design beam to recompute, then download.'
-      : 'Run a design first to generate a calculation report.');
+    showError('Run a design first to generate a calculation report.');
     return;
   }
   const btn = document.getElementById('exportCalcBtn');
