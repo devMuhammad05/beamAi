@@ -456,6 +456,7 @@ function renderSummary(schema){
 function normalizeData(data){
   const rows = Array.isArray(data.results) ? data.results : (data.rows ?? []);
   return {
+    analysis_id:      data.analysis_id,
     schema:           data.schema,
     classification:   data.classification,
     rows,
@@ -478,15 +479,14 @@ function render(data){
   renderDiagram('defl', nd.rows.map(r=>({x:r.x, v:r.deflection})),  COLORS.defl, true);
   renderTable(nd.rows);
   renderPeaks(nd);
-  renderDesignResults();
 }
 
-// "run" interaction — fetch analysis from API
+// "run" interaction
 document.getElementById('runBtn').addEventListener('click', async () => {
   const btn = document.getElementById('runBtn');
-  const promptInput = document.getElementById('promptInput').value.trim();
+  const promptText = document.getElementById('promptInput').value.trim();
 
-  if (!promptInput && !attachedFile1) {
+  if (!promptText && !attachedFile1) {
     showError('Please describe the beam or attach an image first');
     return;
   }
@@ -496,21 +496,47 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   btn.disabled = true;
   incrementAnalysisCount();
 
-  // Show loading state, hide results
   document.getElementById('loadingState').classList.remove('hidden');
-  document.getElementById('section01').classList.add('hidden');
-  document.getElementById('section02').classList.add('hidden');
-  document.getElementById('section03').classList.add('hidden');
-  document.getElementById('section04').classList.add('hidden');
-  document.getElementById('section05').classList.add('hidden');
-  ['sfdPeak','bmdPeak','deflPeak'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.querySelector('#loadingState p').textContent =
+    analysisMode === 'design' ? 'Designing your beam…' : 'Analyzing your beam…';
+  ['section01','section03','section04','section05'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
+  ['sfdPeak','bmdPeak','deflPeak'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
 
+  // ── Design mode: /api/design only ──────────────────────────────────────
+  if (analysisMode === 'design') {
+    lastRunPrompt = promptText;
+    currentDesignApiData = null;
+    try {
+      const designData = await callDesignApi(promptText);
+      console.log('design response:', designData);
+      currentDesignApiData = designData;
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('section04').classList.remove('hidden');
+      syncSettingsFromDesignResponse(designData);
+      renderDesignResultsFromApi(designData);
+    } catch (error) {
+      document.getElementById('loadingState').classList.add('hidden');
+      const msg = error.message || 'Design failed. Please try again.';
+      const displayMessage =
+        error.status === 400 ? msg :
+        error.status === 429 ? 'Quota limit reached. Please try again in a few minutes.' :
+        'An error occurred. Please try again later.';
+      showError(displayMessage);
+    }
+    btn.textContent = original;
+    btn.disabled = false;
+    return;
+  }
+
+  // ── Analysis mode: /api/analyse only ───────────────────────────────────
   try {
     let response;
     if (attachedFile1) {
       const fd = new FormData();
       fd.append('image1', attachedFile1, 'image1.jpg');
-      if (promptInput) fd.append('prompt', promptInput);
+      if (promptText) fd.append('prompt', promptText);
       response = await fetch(`${API_BASE}/api/analyse-image`, {
         method: 'POST',
         headers: authHeaders(),
@@ -520,7 +546,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
       response = await fetch(`${API_BASE}/api/analyse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ prompt: promptInput }),
+        body: JSON.stringify({ prompt: promptText }),
       });
     }
 
@@ -530,19 +556,14 @@ document.getElementById('runBtn').addEventListener('click', async () => {
         const errorData = await response.json();
         if (errorData.detail && typeof errorData.detail === 'object') {
           const detail = errorData.detail;
-          if (detail.error && detail.message) {
-            errorDetails = `${detail.error}: ${detail.message}`;
-          } else if (detail.message) {
-            errorDetails = detail.message;
-          } else {
-            errorDetails = JSON.stringify(detail);
-          }
+          if (detail.error && detail.message) errorDetails = `${detail.error}: ${detail.message}`;
+          else if (detail.message) errorDetails = detail.message;
+          else errorDetails = JSON.stringify(detail);
         } else if (errorData.detail && typeof errorData.detail === 'string') {
           errorDetails = errorData.detail;
         }
       } catch (e) {
-        const errorText = await response.text();
-        errorDetails = errorText || response.statusText;
+        errorDetails = (await response.text()) || response.statusText;
       }
       const error = new Error(errorDetails);
       error.statusCode = response.status;
@@ -552,12 +573,9 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     const data = await response.json();
     console.log('analysis response:', data);
 
-    // Hide loading state, show results
     document.getElementById('loadingState').classList.add('hidden');
     document.getElementById('section01').classList.remove('hidden');
-    document.getElementById('section02').classList.toggle('hidden', analysisMode !== 'design');
     document.getElementById('section03').classList.remove('hidden');
-    document.getElementById('section04').classList.toggle('hidden', analysisMode !== 'design');
     document.getElementById('section05').classList.remove('hidden');
 
     render(data);
@@ -565,18 +583,12 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     btn.disabled = false;
   } catch (error) {
     document.getElementById('loadingState').classList.add('hidden');
-
     console.error('Analysis failed:', error.statusCode ?? 'no status', error.message, error);
 
     let displayMessage = 'An error occurred. Please try again later.';
-
-    if (error.statusCode === 400 || error.statusCode === 422) {
-      displayMessage = error.message;
-    } else if (error.statusCode === 413) {
-      displayMessage = 'Image too large. Each file must be under 0.5 MB.';
-    } else if (error.statusCode === 429) {
-      displayMessage = 'Quota limit reached. Please try again in a few minutes.';
-    }
+    if (error.statusCode === 400 || error.statusCode === 422) displayMessage = error.message;
+    else if (error.statusCode === 413) displayMessage = 'Image too large. Each file must be under 0.5 MB.';
+    else if (error.statusCode === 429) displayMessage = 'Quota limit reached. Please try again in a few minutes.';
 
     showError(displayMessage);
     btn.textContent = original;
@@ -586,293 +598,38 @@ document.getElementById('runBtn').addEventListener('click', async () => {
 
 // PDF download functionality
 let currentAnalysisData = null;
+let currentDesignApiData = null;
+let lastRunPrompt = '';
+let designRerunTimer = null;
 
 document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
-  if (!currentAnalysisData) return;
+  if (!currentAnalysisData || !currentAnalysisData.analysis_id) return;
 
   const btn = document.getElementById('downloadPdfBtn');
-  const original = btn.textContent;
+  const original = btn.innerHTML;
   btn.textContent = 'Generating…';
   btn.disabled = true;
 
   try {
-    if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF library not loaded');
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    const PW = doc.internal.pageSize.getWidth();
-    const PH = doc.internal.pageSize.getHeight();
-    const M  = 15;
-    const CW = PW - 2 * M;
-    const FOOTER_Y = PH - 10;
-
-    // palette
-    const INK    = [22,  36,  59];
-    const STEEL  = [94, 112, 129];
-    const BLUE   = [59, 110, 165];
-    const ORANGE = [232, 98,  58];
-    const TEAL   = [47, 143, 111];
-    const AMBER  = [245, 166, 35];
-    const PAPER  = [238, 241, 244];
-    const GRID   = [215, 224, 234];
-    const WHITE  = [255, 255, 255];
-
-    const schema         = currentAnalysisData.schema;
-    const classification = currentAnalysisData.classification || {};
-    const userPrompt     = promptInput.value.trim();
-    const now            = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
-    const timeStr = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-
-    // ── helpers ────────────────────────────────────────────────────────
-    const setColor  = (rgb) => doc.setTextColor(...rgb);
-    const setFill   = (rgb) => doc.setFillColor(...rgb);
-    const setStroke = (rgb) => doc.setDrawColor(...rgb);
-
-    function drawFooter(pageNum, total){
-      doc.setFontSize(8);
-      doc.setFont(undefined, 'normal');
-      setColor(STEEL);
-      setStroke(GRID);
-      doc.line(M, FOOTER_Y - 3, PW - M, FOOTER_Y - 3);
-      doc.text('BeamAi  ·  Structural Analysis Report', M, FOOTER_Y);
-      const pg = total ? `Page ${pageNum} of ${total}` : `Page ${pageNum}`;
-      doc.text(pg, PW - M, FOOTER_Y, { align: 'right' });
-    }
-
-    function sectionLabel(text, y){
-      doc.setFontSize(7.5);
-      doc.setFont(undefined, 'bold');
-      setColor(STEEL);
-      doc.text(text.toUpperCase(), M, y);
-      setStroke(GRID);
-      doc.line(M, y + 1.5, PW - M, y + 1.5);
-      return y + 7;
-    }
-
-    function ensureSpace(y, needed){
-      if (y + needed > PH - 20){
-        drawFooter(doc.internal.pages.length - 1);
-        doc.addPage();
-        setFill(AMBER); doc.rect(0, 0, 4, 5, 'F');
-        return 18;
-      }
-      return y;
-    }
-
-    let y = 0;
-
-    // ── 1. Header band ─────────────────────────────────────────────────
-    setFill(INK);  doc.rect(0, 0, PW, 32, 'F');
-    setFill(AMBER); doc.rect(0, 0, 4, 32, 'F');
-
-    doc.setFontSize(20);
-    doc.setFont(undefined, 'bold');
-    setColor(WHITE);
-    doc.text('BeamAi', M + 3, 14);
-
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    setColor([180, 200, 220]);
-    doc.text('Structural Analysis Report', M + 3, 21);
-
-    doc.setFontSize(8);
-    setColor([130, 155, 180]);
-    doc.text(`${dateStr}  ·  ${timeStr}`, PW - M, 21, { align: 'right' });
-
-    y = 40;
-
-    // ── 2. User prompt ─────────────────────────────────────────────────
-    y = sectionLabel('Beam Description', y);
-
-    const promptLines = doc.splitTextToSize(`"${userPrompt}"`, CW - 12);
-    const promptBoxH  = promptLines.length * 5.2 + 9;
-
-    setFill(PAPER);
-    doc.roundedRect(M, y, CW, promptBoxH, 2, 2, 'F');
-    setFill(BLUE);
-    doc.rect(M, y, 3, promptBoxH, 'F');
-
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'italic');
-    setColor(INK);
-    doc.text(promptLines, M + 9, y + 6.5);
-
-    y += promptBoxH + 9;
-
-    // ── 3. Classification chips ────────────────────────────────────────
-    if (classification.beam_type){
-      y = ensureSpace(y, 35);
-      y = sectionLabel('Beam Classification', y);
-
-      const beamLabel = (classification.beam_type || '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
-
-      const chipW = (CW - 4) / 2;
-      const chipH = 13;
-
-      // chip 1 — beam type
-      setFill(PAPER); doc.roundedRect(M, y, chipW, chipH, 2, 2, 'F');
-      doc.setFontSize(7); doc.setFont(undefined, 'normal'); setColor(STEEL);
-      doc.text('BEAM TYPE', M + 5, y + 5);
-      doc.setFontSize(9.5); doc.setFont(undefined, 'bold'); setColor(INK);
-      doc.text(beamLabel, M + 5, y + 10.5);
-
-      // chip 2 — DSI
-      setFill(PAPER); doc.roundedRect(M + chipW + 4, y, chipW, chipH, 2, 2, 'F');
-      doc.setFontSize(7); doc.setFont(undefined, 'normal'); setColor(STEEL);
-      doc.text('DEGREE OF INDETERMINACY  (DSI)', M + chipW + 9, y + 5);
-      doc.setFontSize(9.5); doc.setFont(undefined, 'bold'); setColor(INK);
-      doc.text(`${classification.dsi ?? '—'}`, M + chipW + 9, y + 10.5);
-
-      y += chipH + 5;
-
-      if (classification.description){
-        doc.setFontSize(9); doc.setFont(undefined, 'normal'); setColor(STEEL);
-        const dl = doc.splitTextToSize(classification.description, CW);
-        doc.text(dl, M, y);
-        y += dl.length * 4.5 + 4;
-      }
-
-      y += 4;
-    }
-
-    // ── 4. Structural model ────────────────────────────────────────────
-    y = ensureSpace(y, 45);
-    y = sectionLabel('Structural Model', y);
-
-    // span badge
-    setFill(INK); doc.roundedRect(M, y, 44, 10, 2, 2, 'F');
-    doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); setColor(WHITE);
-    doc.text(`${schema.length.toFixed(3)} m  span`, M + 4, y + 6.8);
-    y += 14;
-
-    // supports
-    doc.setFontSize(8); doc.setFont(undefined, 'bold'); setColor(INK);
-    doc.text('Supports', M, y); y += 5;
-
-    schema.supports.forEach(s => {
-      y = ensureSpace(y, 6);
-      doc.setFontSize(9); doc.setFont(undefined, 'normal');
-      setColor(STEEL); doc.text('•', M + 2, y);
-      setColor(INK);
-      const tl = s.type.charAt(0).toUpperCase() + s.type.slice(1);
-      doc.text(`${tl} support`, M + 7, y);
-      setColor(STEEL); doc.text(`x = ${s.position.toFixed(3)} m`, M + 50, y);
-      y += 5;
+    const res = await fetch(`${API_BASE}/api/analyse/${currentAnalysisData.analysis_id}/report`, {
+      headers: authHeaders(),
     });
-
-    y += 3;
-
-    // loads
-    doc.setFontSize(8); doc.setFont(undefined, 'bold'); setColor(INK);
-    doc.text('Applied Loads', M, y); y += 5;
-
-    schema.udls.forEach(u => {
-      y = ensureSpace(y, 6);
-      doc.setFontSize(9); doc.setFont(undefined, 'normal');
-      setColor(ORANGE); doc.text('•', M + 2, y);
-      setColor(INK); doc.text(`UDL  ${Math.abs(u.magnitude/1000).toFixed(1)} kN/m`, M + 7, y);
-      setColor(STEEL); doc.text(`x ∈ [${u.start.toFixed(2)}, ${u.end.toFixed(2)}] m`, M + 58, y);
-      y += 5;
-    });
-
-    (schema.point_loads || []).forEach(pl => {
-      y = ensureSpace(y, 6);
-      doc.setFontSize(9); doc.setFont(undefined, 'normal');
-      setColor(ORANGE); doc.text('•', M + 2, y);
-      setColor(INK); doc.text(`Point load  ${Math.abs(pl.magnitude/1000).toFixed(1)} kN`, M + 7, y);
-      setColor(STEEL); doc.text(`x = ${pl.position.toFixed(3)} m`, M + 58, y);
-      y += 5;
-    });
-
-    (schema.varying_loads || []).forEach(vl => {
-      y = ensureSpace(y, 6);
-      doc.setFontSize(9); doc.setFont(undefined, 'normal');
-      setColor(BLUE); doc.text('•', M + 2, y);
-      setColor(INK);
-      const s0 = Math.abs(vl.start_magnitude/1000).toFixed(1);
-      const s1 = Math.abs(vl.end_magnitude/1000).toFixed(1);
-      doc.text(`Varying  ${s0} → ${s1} kN/m`, M + 7, y);
-      setColor(STEEL); doc.text(`x ∈ [${vl.start.toFixed(2)}, ${vl.end.toFixed(2)}] m`, M + 58, y);
-      y += 5;
-    });
-
-    y += 9;
-
-    // ── 5. Peak values ─────────────────────────────────────────────────
-    if (currentAnalysisData.max_sf != null) {
-      y = ensureSpace(y, 38);
-      y = sectionLabel('Peak Values', y);
-
-      const peakRows = [
-        { label: 'Max Shear Force',    value: `${(currentAnalysisData.max_sf / 1000).toFixed(3)} kN`,           at: currentAnalysisData.max_sf_x,          color: BLUE },
-        { label: 'Max Bending Moment', value: `${(currentAnalysisData.max_bm / 1000).toFixed(3)} kN·m`,         at: currentAnalysisData.max_bm_x,          color: ORANGE },
-        { label: 'Max Deflection',     value: `${Math.abs(currentAnalysisData.max_deflection ?? 0).toFixed(4)} mm`, at: currentAnalysisData.max_deflection_x, color: TEAL },
-      ];
-
-      peakRows.forEach(pk => {
-        y = ensureSpace(y, 8);
-        setFill(pk.color); doc.circle(M + 2.5, y - 1.5, 1.5, 'F');
-        doc.setFontSize(9); doc.setFont(undefined, 'normal'); setColor(STEEL);
-        doc.text(pk.label, M + 7, y);
-        doc.setFont(undefined, 'bold'); setColor(INK);
-        doc.text(pk.value, M + 65, y);
-        doc.setFont(undefined, 'normal'); setColor(STEEL);
-        doc.text(`at x = ${pk.at} m`, M + 108, y);
-        y += 6;
-      });
-
-      y += 5;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.detail?.message || `Report request failed (${res.status})`);
     }
-
-    // ── 6. Results table ───────────────────────────────────────────────
-    y = ensureSpace(y, 20);
-    y = sectionLabel('Analysis Results', y);
-
-    const tableBody = currentAnalysisData.rows.map(r => [
-      r.x.toFixed(3),
-      (r.axial  / 1000).toFixed(3),
-      (r.shear  / 1000).toFixed(3),
-      (r.moment / 1000).toFixed(3),
-      r.deflection.toFixed(4)
-    ]);
-
-    doc.autoTable({
-      startY: y,
-      head: [['x (m)', 'Axial (kN)', 'Shear (kN)', 'Moment (kN·m)', 'Deflection (mm)']],
-      body: tableBody,
-      margin: { left: M, right: M, bottom: 18 },
-      styles: { fontSize: 9, cellPadding: 2.8, textColor: INK, font: 'helvetica' },
-      headStyles: {
-        fillColor: INK, textColor: WHITE,
-        fontStyle: 'bold', fontSize: 9, cellPadding: 3
-      },
-      alternateRowStyles: { fillColor: PAPER },
-      columnStyles: {
-        0: { halign: 'left'  },
-        1: { halign: 'right' },
-        2: { halign: 'right' },
-        3: { halign: 'right' },
-      },
-      didDrawPage(data){
-        setFill(AMBER); doc.rect(0, 0, 4, 5, 'F');
-        drawFooter(data.pageNumber, data.pageCount);
-      }
-    });
-
-    doc.save(`beam-report-${now.getTime()}.pdf`);
-
+    const { report_url } = await res.json();
+    if (!report_url) throw new Error('No report URL returned');
+    window.open(report_url, '_blank');
   } catch (error) {
-    console.error('PDF generation failed:', error);
-    showError('Failed to generate PDF. Please try again.');
+    console.error('Report generation failed:', error);
+    showError(error.message || 'Failed to generate report. Please try again.');
   } finally {
-    btn.textContent = original;
+    btn.innerHTML = original;
     btn.disabled = false;
   }
 });
+
 
 // ── image upload & camera capture ─────────────────────────────────────────
 let attachedImageBase64 = null;
@@ -966,21 +723,11 @@ const designSettings = {
   fck:   30,
   fyk:   500,
   cover: 40,
-  bars:  new Set(['T12', 'T16', 'T20']),
+  bars:  new Set(),
   links: 'T8',
 };
+let userSetBars = false;
 
-function updateDsSummary() {
-  const yLabel = designSettings.code === 'BS8110' ? 'fy' : 'fyk';
-  const bars   = [...designSettings.bars].sort((a, b) => {
-    const n = s => parseInt(s.replace('T', ''));
-    return n(a) - n(b);
-  }).join(' ');
-  document.getElementById('dsSummary').textContent =
-    `C${designSettings.fck} · ${yLabel} ${designSettings.fyk} · Cover ${designSettings.cover}mm · ${designSettings.code} · ${bars}`;
-  updateChipLabels();
-  renderDesignResults();
-}
 
 function setChipActive(group, activeVal) {
   document.querySelectorAll(`[data-ds="${group}"]`).forEach(b => {
@@ -995,10 +742,10 @@ function setChipActive(group, activeVal) {
   });
 }
 
-// Toggle collapse / expand
-document.getElementById('designSettingsToggle').addEventListener('click', () => {
-  const panel   = document.getElementById('designSettingsPanel');
-  const chevron = document.getElementById('dsChevron');
+// Advanced settings toggle
+document.getElementById('dsAdvancedBtn').addEventListener('click', () => {
+  const panel   = document.getElementById('dsAdvancedPanel');
+  const chevron = document.getElementById('dsAdvChevron');
   const opening = panel.classList.contains('hidden');
   panel.classList.toggle('hidden', !opening);
   chevron.style.transform = opening ? 'rotate(180deg)' : '';
@@ -1023,57 +770,232 @@ document.querySelectorAll('.ds-chip, .ds-toggle').forEach(btn => {
       designSettings[group] = val;
     }
 
+    currentDesignApiData = null;
     setChipActive(group, val);
-    updateDsSummary();
+    renderDesignResults();
   });
 });
 
-// Multi-select chips (preferred bar sizes)
+// Multi-select chips (bar sizes — optional, no default selection)
 document.querySelectorAll('.ds-multi').forEach(btn => {
   btn.addEventListener('click', () => {
     const val = btn.dataset.val;
     if (designSettings.bars.has(val)) {
-      if (designSettings.bars.size > 1) designSettings.bars.delete(val);
+      designSettings.bars.delete(val);
     } else {
       designSettings.bars.add(val);
+      userSetBars = true;
     }
+    if (designSettings.bars.size === 0) userSetBars = false;
     const active = designSettings.bars.has(val);
-    btn.classList.toggle('bg-ink',    active);
+    btn.classList.toggle('bg-ink',     active);
     btn.classList.toggle('text-paper', active);
-    btn.classList.toggle('bg-paper',  !active);
-    btn.classList.toggle('text-ink',  !active);
-    updateDsSummary();
+    btn.classList.toggle('bg-surface', !active);
+    btn.classList.toggle('text-ink',   !active);
+    currentDesignApiData = null;
+    renderDesignResults();
   });
 });
 
 // Custom value inputs
 document.getElementById('dsFckCustom').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
-  if (v > 0) {
-    designSettings.fck = v;
-    setChipActive('fck', null);
-    updateDsSummary();
-  }
+  if (v > 0) { designSettings.fck = v; currentDesignApiData = null; setChipActive('fck', null); renderDesignResults(); }
 });
 document.getElementById('dsFykCustom').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
-  if (v > 0) {
-    designSettings.fyk = v;
-    setChipActive('fyk', null);
-    updateDsSummary();
-  }
+  if (v > 0) { designSettings.fyk = v; currentDesignApiData = null; setChipActive('fyk', null); renderDesignResults(); }
 });
 document.getElementById('dsCoverCustom').addEventListener('change', e => {
   const v = parseFloat(e.target.value);
-  if (v > 0) {
-    designSettings.cover = v;
-    setChipActive('cover', null);
-    updateDsSummary();
-  }
+  if (v > 0) { designSettings.cover = v; currentDesignApiData = null; setChipActive('cover', null); renderDesignResults(); }
 });
 
-// initialise summary + status line on load
-updateDsSummary();
+// ── design API helpers ────────────────────────────────────────────────────
+
+function showDesignLoading(loading) {
+  const placeholder = '<div class="font-mono text-[11px] text-steel/60 py-1 animate-pulse">Computing…</div>';
+  ['drFlexural', 'drShear', 'drDeflection'].forEach(id => {
+    if (loading) document.getElementById(id).innerHTML = placeholder;
+  });
+}
+
+async function callDesignApi(prompt) {
+  const b   = parseInt(document.getElementById('drBeamB').value) || 300;
+  const h   = parseInt(document.getElementById('drBeamH').value) || 500;
+  const fyv = Math.max(200, parseInt(document.getElementById('drFyv').value) || 250);
+
+  const augPrompt = `${prompt}, section ${b}mm wide × ${h}mm deep`;
+  const settings = {
+    design_code: 'bs8110',
+    fcu:         designSettings.fck,
+    fy:          designSettings.fyk,
+    fyv,
+    cover:       designSettings.cover,
+    link_dia:    parseInt(designSettings.links.replace('T', '')),
+    ...(userSetBars && designSettings.bars.size > 0 && {
+      preferred_bars: [...designSettings.bars].map(s => parseInt(s.replace('T', ''))).sort((a, b) => a - b),
+    }),
+  };
+
+  const res = await fetch(`${API_BASE}/api/design`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body:    JSON.stringify({ prompt: augPrompt, settings }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err?.detail?.message || err?.detail || `HTTP ${res.status}`;
+    throw Object.assign(new Error(msg), { status: res.status });
+  }
+
+  return res.json();
+}
+
+function syncSettingsFromDesignResponse(data) {
+  const s  = data.applied_settings || {};
+  const pi = data.parsed_input     || {};
+  const sc = data.section          || {};
+
+  // ── Design code ─────────────────────────────────────────────────────────
+  if (s.design_code) {
+    const code = 'BS8110'; // EC2 not yet supported
+    designSettings.code = code;
+    setChipActive('code', code);
+  }
+
+  // ── Concrete grade (fcu/fck) ─────────────────────────────────────────────
+  const fcu = s.fcu ?? sc.fcu_Nmm2 ?? null;
+  if (fcu != null) {
+    designSettings.fck = fcu;
+    setChipActive('fck', String(fcu));
+    const chip = document.querySelector(`.ds-chip[data-ds="fck"][data-val="${fcu}"]`);
+    const inp  = document.getElementById('dsFckCustom');
+    if (!chip && inp) inp.value = fcu;
+    else if (inp)     inp.value = '';
+  }
+
+  // ── Steel yield (fy/fyk) ─────────────────────────────────────────────────
+  const fy = s.fy ?? sc.fy_Nmm2 ?? null;
+  if (fy != null) {
+    designSettings.fyk = fy;
+    setChipActive('fyk', String(fy));
+    const chip = document.querySelector(`.ds-chip[data-ds="fyk"][data-val="${fy}"]`);
+    const inp  = document.getElementById('dsFykCustom');
+    if (!chip && inp) inp.value = fy;
+    else if (inp)     inp.value = '';
+  }
+
+  // ── Cover ─────────────────────────────────────────────────────────────────
+  if (s.cover != null) {
+    designSettings.cover = s.cover;
+    setChipActive('cover', String(s.cover));
+    const chip = document.querySelector(`.ds-chip[data-ds="cover"][data-val="${s.cover}"]`);
+    const inp  = document.getElementById('dsCoverCustom');
+    if (!chip && inp) inp.value = s.cover;
+    else if (inp)     inp.value = '';
+  }
+
+  // ── Links diameter ────────────────────────────────────────────────────────
+  if (s.link_dia != null) {
+    const linkVal = `T${s.link_dia}`;
+    designSettings.links = linkVal;
+    setChipActive('links', linkVal);
+  }
+
+  // ── fyv input in section §04 ─────────────────────────────────────────────
+  const fyv = s.fyv ?? sc.fyv_Nmm2 ?? null;
+  if (fyv != null) {
+    const fyvEl = document.getElementById('drFyv');
+    if (fyvEl) fyvEl.value = fyv;
+  }
+
+  // ── Section dimensions in §04 ────────────────────────────────────────────
+  const b = sc.b_mm ?? pi.section?.b ?? null;
+  const h = sc.h_mm ?? pi.section?.h ?? null;
+  if (b != null) { const el = document.getElementById('drBeamB'); if (el) el.value = b; }
+  if (h != null) { const el = document.getElementById('drBeamH'); if (el) el.value = h; }
+
+  // ── Support condition in §04 ─────────────────────────────────────────────
+  const cond = pi.support_condition || '';
+  if (cond) {
+    const mapped = cond.includes('cant') ? 'cant' : cond.includes('cont') ? 'cont' : 'ss';
+    setDrSupport(mapped);
+  }
+
+  // ── Open advanced panel so the user sees what was used ───────────────────
+  if (Object.keys(s).length > 0) {
+    const panel   = document.getElementById('dsAdvancedPanel');
+    const chevron = document.getElementById('dsAdvChevron');
+    if (panel?.classList.contains('hidden')) {
+      panel.classList.remove('hidden');
+      if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
+  }
+}
+
+function renderDesignResultsFromApi(data) {
+  const fl = data.flexure;
+  const sh = data.shear;
+  const de = data.deflection;
+  const sc = data.section;
+  const rf = data.reinforcement;
+  const df = data.design_forces;
+
+  document.getElementById('drUlsMoment').textContent = `ULS Moment: ${df.M_ult_kNm.toFixed(1)} kN·m`;
+  document.getElementById('drUlsShear').textContent  = `ULS Shear: ${df.V_ult_kN.toFixed(1)} kN`;
+
+  // Flexural
+  const flexLines = [];
+  flexLines.push(drLine('Section d', `${sc.d_mm} mm`));
+  flexLines.push(drLine(`K  (K′ = ${fl.K_prime.toFixed(3)})`, fl.K.toFixed(4)));
+  if (fl.doubly_reinforced) {
+    flexLines.push(drLine('K > K′', 'Compression steel required', false));
+    flexLines.push(drLine('As₂ req', `${Math.ceil(fl.As2_req_mm2)} mm²`));
+  }
+  flexLines.push(drLine('Lever arm z', `${fl.z_mm.toFixed(1)} mm`));
+  flexLines.push(drLine('As req', `${Math.ceil(fl.As_req_mm2)} mm²`));
+  flexLines.push(drLine('As min / max', `${Math.ceil(fl.As_min_mm2)} / ${Math.floor(fl.As_max_mm2)} mm²`));
+  if (rf.tension) {
+    const t = rf.tension;
+    const provOk = t.As_prov_mm2 >= fl.As_req_mm2 && t.As_prov_mm2 <= fl.As_max_mm2;
+    flexLines.push(drLine('Provided', `${t.label}  →  Aₛ = ${t.As_prov_mm2.toFixed(0)} mm²`, provOk));
+    if (t.clear_spacing_mm != null) {
+      flexLines.push(drLine('Clear spacing', `${t.clear_spacing_mm.toFixed(1)} mm`, t.spacing_ok));
+    }
+  }
+  if (rf.compression) {
+    const c = rf.compression;
+    flexLines.push(drLine('Compression steel', `${c.label}  →  As₂ = ${c.As_prov_mm2.toFixed(0)} mm²`));
+  }
+
+  // Shear
+  const shearLines = [];
+  shearLines.push(drLine(`v  (v_max = ${sh.v_max_Nmm2.toFixed(2)})`, `${sh.v_Nmm2.toFixed(3)} N/mm²`, sh.v_Nmm2 <= sh.v_max_Nmm2));
+  shearLines.push(drLine('vc', `${sh.vc_Nmm2.toFixed(3)} N/mm²`));
+  shearLines.push(drLine(`Asv/sv req (${sh.link_type})`, `${sh.Asv_sv_req_mm2mm.toFixed(3)} mm²/mm`));
+  if (rf.links) {
+    const lnk = rf.links;
+    const linkOk = lnk.Asv_sv_prov_mm2mm >= sh.Asv_sv_req_mm2mm;
+    shearLines.push(drLine('Links', `${lnk.label}  →  ${lnk.Asv_sv_prov_mm2mm.toFixed(3)} mm²/mm`, linkOk));
+  }
+
+  // Deflection
+  const deflOk = de.span_d_actual <= de.span_d_allowable;
+  const deflLines = [];
+  deflLines.push(drLine('MF tension', de.MF_tension.toFixed(3)));
+  deflLines.push(drLine('Allowable span/d', de.span_d_allowable.toFixed(2)));
+  deflLines.push(drLine('Actual span/d', de.span_d_actual.toFixed(2), deflOk));
+  if (!deflOk && currentAnalysisData) {
+    const d_needed = Math.ceil(currentAnalysisData.schema.length * 1000 / de.span_d_allowable);
+    deflLines.push(drLine('Note', `Increase d to ≥ ${d_needed} mm`, false));
+  }
+
+  document.getElementById('drFlexural').innerHTML   = flexLines.join('');
+  document.getElementById('drShear').innerHTML      = shearLines.join('');
+  document.getElementById('drDeflection').innerHTML = deflLines.join('');
+}
 
 // ── design results ─────────────────────────────────────────────────────────
 const BAR_AREAS = { T8:50.3, T10:78.5, T12:113.1, T16:201.1, T20:314.2, T25:490.9, T32:804.2 };
@@ -1092,6 +1014,7 @@ let drSupportCond = 'ss'; // 'ss' | 'cont' | 'cant'
 
 function renderDesignResults() {
   if (!currentAnalysisData) return;
+  if (currentDesignApiData) { renderDesignResultsFromApi(currentDesignApiData); return; }
 
   const b     = Math.max(100, parseInt(document.getElementById('drBeamB').value)  || 300);
   const h     = Math.max(150, parseInt(document.getElementById('drBeamH').value)  || 500);
@@ -1243,6 +1166,7 @@ function renderDesignResults() {
 // Support condition toggle
 function setDrSupport(cond) {
   drSupportCond = cond;
+  currentDesignApiData = null;
   const map = { ss: 'drSuppSS', cont: 'drSuppCont', cant: 'drSuppCant' };
   Object.entries(map).forEach(([k, id]) => {
     const btn = document.getElementById(id);
@@ -1260,11 +1184,61 @@ document.getElementById('drSuppCant')?.addEventListener('click', () => setDrSupp
 
 // Recompute when beam section dimensions or fyv change
 ['drBeamB', 'drBeamH', 'drFyv'].forEach(id =>
-  document.getElementById(id)?.addEventListener('input', renderDesignResults)
+  document.getElementById(id)?.addEventListener('input', () => {
+    currentDesignApiData = null;
+    renderDesignResults();
+    if (analysisMode === 'design' && lastRunPrompt) {
+      clearTimeout(designRerunTimer);
+      designRerunTimer = setTimeout(async () => {
+        try {
+          const data = await callDesignApi(lastRunPrompt);
+          currentDesignApiData = data;
+          renderDesignResultsFromApi(data);
+        } catch { /* keep client-side result */ }
+      }, 800);
+    }
+  })
 );
 
-// Export calculation sheet PDF
-document.getElementById('exportCalcBtn').addEventListener('click', () => {
+// Export calculation sheet PDF — backend-generated, on-demand
+document.getElementById('exportCalcBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('exportCalcBtn');
+  const original = btn.innerHTML;
+  btn.textContent = 'Generating…';
+  btn.disabled = true;
+  try {
+    let designId = currentDesignApiData?.design_id;
+    if (!designId) {
+      if (!lastRunPrompt) {
+        showError('Run a design first to generate a calculation report.');
+        return;
+      }
+      const data = await callDesignApi(lastRunPrompt);
+      currentDesignApiData = data;
+      designId = data.design_id;
+      if (!designId) throw new Error('Design response missing design_id');
+    }
+    const res = await fetch(`${API_BASE}/api/design/${designId}/report`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.detail?.message || `Report request failed (${res.status})`);
+    }
+    const { report_url } = await res.json();
+    if (!report_url) throw new Error('No report URL returned');
+    window.open(report_url, '_blank');
+  } catch (error) {
+    console.error('Design report generation failed:', error);
+    showError(error.message || 'Failed to generate calculation report.');
+  } finally {
+    btn.innerHTML = original;
+    btn.disabled = false;
+  }
+});
+
+// ── legacy client-side calc-sheet generator (kept dead, replaced above) ─────
+function _unusedLegacyCalcSheet() {
   if (!currentAnalysisData || !window.jspdf) return;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1342,7 +1316,7 @@ document.getElementById('exportCalcBtn').addEventListener('click', () => {
   doc.text('Generated by BeamAi — simplified design to ' + designSettings.code + '. Verify all outputs independently before use.', M, y, { maxWidth: CW });
 
   doc.save('BeamAi_Calculation.pdf');
-});
+}
 
 // ── analysis / design mode toggle ─────────────────────────────────────────
 function setMode(mode) {
@@ -1361,15 +1335,20 @@ function setMode(mode) {
   btnD.classList.toggle('bg-surface',!isDesign);
   btnD.classList.toggle('text-steel',!isDesign);
 
-  // Show / hide design chips row
-  document.getElementById('dsChipsRow').classList.toggle('hidden', !isDesign);
+  // Show / hide advanced settings toggle
+  document.getElementById('dsAdvancedToggle').classList.toggle('hidden', !isDesign);
+  document.getElementById('runBtn').textContent = isDesign ? 'Design beam' : 'Run analysis';
 
-  // If a result is already shown, immediately update visible sections
-  if (currentAnalysisData) {
-    document.getElementById('section02').classList.toggle('hidden', !isDesign);
-    document.getElementById('section04').classList.toggle('hidden', !isDesign);
-    if (isDesign) renderDesignResults();
-  }
+  // Swap placeholder to match mode
+  const analysisPlaceholder = 'e.g. "A simply supported beam of 6m span carrying 30kN/m UDL"';
+  const designPlaceholder   = 'e.g. "A 300×500mm simply supported RC beam, 6m span — 20kN/m dead UDL, 15kN/m live UDL, and a 50kN point load at midspan."';
+  document.getElementById('promptInput').placeholder = isDesign ? designPlaceholder : analysisPlaceholder;
+
+  // Clear results — each mode fetches from a different endpoint
+  ['section01','section03','section04','section05'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
+  ['sfdPeak','bmdPeak','deflPeak'].forEach(id =>
+    document.getElementById(id).classList.add('hidden'));
 }
 
 document.getElementById('modeAnalysis').addEventListener('click', () => setMode('analysis'));
@@ -1384,130 +1363,4 @@ document.getElementById('howItWorksToggle').addEventListener('click', () => {
   chevron.style.transform = opening ? 'rotate(180deg)' : '';
 });
 
-// ── prompt-area design-setting chips (Section 00) ─────────────────────────
-function updateChipLabels() {
-  const fLabel = designSettings.code === 'BS8110' ? 'fcu' : 'fck';
-  const yLabel = designSettings.code === 'BS8110' ? 'fy'  : 'fyk';
-  const bars   = [...designSettings.bars]
-    .sort((a, b) => parseInt(a.replace('T','')) - parseInt(b.replace('T','')))
-    .join(' ');
-
-  const setLabel = (id, text) => {
-    const el = document.getElementById(`dsChipBtn-${id}`);
-    if (el) el.innerHTML = `${text} <span class="text-steel/40 text-[8px]">▾</span>`;
-  };
-  setLabel('code',  designSettings.code);
-  setLabel('fck',   `${fLabel} ${designSettings.fck}`);
-  setLabel('fyk',   `${yLabel} ${designSettings.fyk}`);
-  setLabel('cover', `Cover ${designSettings.cover}mm`);
-  setLabel('bars',  `Bars: ${bars}`);
-  setLabel('links', `Links: ${designSettings.links}`);
-
-  // Active state in grid dropdowns (fck, fyk, cover)
-  ['fck', 'fyk', 'cover'].forEach(group => {
-    const val = String(designSettings[group]);
-    document.querySelectorAll(`#dsDropdown-${group} .chip-dd-opt`).forEach(b => {
-      const active = b.dataset.val === val;
-      b.classList.toggle('bg-ink',    active);
-      b.classList.toggle('text-paper', active);
-      b.classList.toggle('bg-paper',  !active);
-      b.classList.toggle('text-ink',  !active);
-    });
-  });
-  // Active state in list dropdowns (code, links)
-  ['code', 'links'].forEach(group => {
-    const val = designSettings[group];
-    document.querySelectorAll(`#dsDropdown-${group} .chip-dd-opt`).forEach(b => {
-      b.classList.toggle('font-semibold', b.dataset.val === val);
-      b.classList.toggle('text-blue',     b.dataset.val === val);
-    });
-  });
-  // Active state in bars multi-select dropdown
-  document.querySelectorAll('#dsDropdown-bars .chip-dd-multi').forEach(b => {
-    const active = designSettings.bars.has(b.dataset.val);
-    b.classList.toggle('bg-ink',    active);
-    b.classList.toggle('text-paper', active);
-    b.classList.toggle('bg-paper',  !active);
-    b.classList.toggle('text-ink',  !active);
-  });
-}
-
-// Open / close chip dropdowns
-document.querySelectorAll('[id^="dsChipBtn-"]').forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const id = btn.id.replace('dsChipBtn-', '');
-    const dd = document.getElementById(`dsDropdown-${id}`);
-    const wasOpen = !dd.classList.contains('hidden');
-    document.querySelectorAll('[id^="dsDropdown-"]').forEach(d => d.classList.add('hidden'));
-    if (!wasOpen) dd.classList.remove('hidden');
-  });
-});
-
-// Clicks inside a dropdown don't close it
-document.querySelectorAll('[id^="dsDropdown-"]').forEach(dd => {
-  dd.addEventListener('click', e => e.stopPropagation());
-});
-
-// Outside click closes all dropdowns
-document.addEventListener('click', () => {
-  document.querySelectorAll('[id^="dsDropdown-"]').forEach(d => d.classList.add('hidden'));
-});
-
-// Single-select options (code, fck, fyk, cover, links)
-document.querySelectorAll('.chip-dd-opt').forEach(opt => {
-  opt.addEventListener('click', e => {
-    e.stopPropagation();
-    const group = opt.dataset.group;
-    const val   = opt.dataset.val;
-
-    if (group === 'fck')   { designSettings.fck   = Number(val); document.getElementById('dsFckCustom').value   = ''; document.querySelector('[data-group-input="fck"]').value   = ''; }
-    else if (group === 'fyk')   { designSettings.fyk   = Number(val); document.getElementById('dsFykCustom').value   = ''; document.querySelector('[data-group-input="fyk"]').value   = ''; }
-    else if (group === 'cover') { designSettings.cover = Number(val); document.getElementById('dsCoverCustom').value = ''; document.querySelector('[data-group-input="cover"]').value = ''; }
-    else                        { designSettings[group] = val; }
-
-    setChipActive(group, val);                                          // sync Section 02 panel
-    document.getElementById(`dsDropdown-${group}`).classList.add('hidden');
-    updateDsSummary();
-  });
-});
-
-// Multi-select options (bars)
-document.querySelectorAll('.chip-dd-multi').forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const val = btn.dataset.val;
-    if (designSettings.bars.has(val)) {
-      if (designSettings.bars.size > 1) designSettings.bars.delete(val);
-    } else {
-      designSettings.bars.add(val);
-    }
-    // Sync Section 02 ds-multi buttons
-    const s02 = document.querySelector(`.ds-multi[data-val="${val}"]`);
-    if (s02) {
-      const a = designSettings.bars.has(val);
-      s02.classList.toggle('bg-ink', a); s02.classList.toggle('text-paper', a);
-      s02.classList.toggle('bg-paper', !a); s02.classList.toggle('text-ink', !a);
-    }
-    updateDsSummary();
-  });
-});
-
-// Custom-value inputs (Enter to confirm)
-document.querySelectorAll('[data-group-input]').forEach(inp => {
-  inp.addEventListener('click', e => e.stopPropagation());
-  inp.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    const group = inp.dataset.groupInput;
-    const v = parseFloat(inp.value);
-    if (v > 0) {
-      designSettings[group] = v;
-      setChipActive(group, null);
-      const s02 = document.getElementById(`ds${group[0].toUpperCase() + group.slice(1)}Custom`);
-      if (s02) s02.value = inp.value;
-      document.getElementById(`dsDropdown-${group}`).classList.add('hidden');
-      updateDsSummary();
-    }
-  });
-});
 

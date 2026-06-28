@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BeamAi - Natural Language to Beam analysis</title>
+<title>BeamAi - Beam Analysis & Design</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2316243B'/><text x='16' y='23' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' font-size='20' fill='%23F5A623'>B</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -91,7 +91,7 @@
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-baseline gap-3">
         <span class="font-display font-bold text-xl tracking-tight text-ink">Beam<span class="text-amber">Ai</span></span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">structural · analysis · nlp</span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">structural · analysis · design</span>
       </div>
       <span class="font-mono text-[11px] text-steel">v0.1</span>
     </div>
@@ -145,10 +145,10 @@
 
     <!-- headline -->
     <h1 class="font-display font-bold text-4xl sm:text-6xl leading-[1.05] tracking-tight mb-4 max-w-2xl text-ink">
-      Describe a beam.<br><span class="text-orange">Get the analysis.</span>
+      Describe a beam.<br><span class="text-orange">Analyse and design it.</span>
     </h1>
     <p class="text-steel text-base sm:text-lg max-w-md mb-8 leading-relaxed font-body">
-      Type a beam problem in plain English. BeamAi returns shear, moment, and deflection diagrams — instantly.
+      Type a beam problem in plain English. BeamAi returns shear, moment and deflection diagrams — plus full RC design.
     </p>
 
     <!-- prompt preview -->
@@ -177,6 +177,8 @@
       <span>NLP → schema</span>
       <span class="text-blue">·</span>
       <span>SFD · BMD · deflection</span>
+      <span class="text-blue">·</span>
+      <span>RC design</span>
       <span class="text-blue">·</span>
       <span>IndeterminateBeam engine</span>
     </div>
@@ -213,7 +215,7 @@
       <span class="font-display font-bold text-xl text-ink">Beam<span class="text-amber">Ai</span></span>
     </div>
     <h2 id="modalTitle" class="font-display font-bold text-xl mb-1 text-ink">Continue to BeamAi</h2>
-    <p class="text-sm text-steel mb-7 font-mono">Sign in to run beam analysis</p>
+    <p class="text-sm text-steel mb-7 font-mono">Sign in to analyse and design beams</p>
     <button id="googleSignIn"
       class="w-full flex items-center justify-center gap-3 border border-grid rounded-lg px-4 py-3 text-sm font-semibold text-ink hover:bg-paper active:bg-grid transition-colors focus:outline-none focus:ring-2 focus:ring-blue/40 focus:ring-offset-2 mb-3">
       <svg width="18" height="18" viewBox="0 0 18 18">
@@ -246,7 +248,7 @@
   // ── modal controls ───────────────────────────────────────────────────────
   document.getElementById('tryBtn').addEventListener('click', () => {
     if (localStorage.getItem('beamAi_token')) {
-      window.location.href = 'analyse.html';
+      window.location.href = 'workspace.html';
       return;
     }
     document.getElementById('authModal').classList.add('open');
@@ -277,7 +279,7 @@
       const { token, user } = await res.json();
       localStorage.setItem('beamAi_token', token);
       sessionStorage.setItem('beamAi_user', JSON.stringify(user));
-      window.location.href = 'analyse';
+      window.location.href = 'workspace';
     } catch {
       btn.disabled = false;
       btn.innerHTML = originalHTML;
