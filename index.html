@@ -145,10 +145,10 @@
 
     <!-- headline -->
     <h1 class="font-display font-bold text-4xl sm:text-6xl leading-[1.05] tracking-tight mb-4 max-w-2xl text-ink">
-      Describe a beam.<br><span class="text-orange">Analyse and design it.</span>
+      Describe it.<br><span class="text-orange">Analyse and design it.</span>
     </h1>
     <p class="text-steel text-base sm:text-lg max-w-md mb-8 leading-relaxed font-body">
-      Type a beam problem in plain English. BeamAi returns shear, moment and deflection diagrams — plus full RC design.
+      Type a structural problem in plain English. BeamAi returns shear, moment and deflection diagrams — plus full RC design for beams and columns.
     </p>
 
     <!-- prompt preview -->
@@ -162,6 +162,32 @@
       class="font-display font-semibold text-base bg-ink text-paper px-8 py-3.5 rounded-md hover:bg-blue active:scale-95 transition-all focus:outline-none focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-paper shadow-sm">
       Try it out →
     </button>
+
+    <!-- tool cards -->
+    <div class="mt-10 flex flex-wrap justify-center gap-4 w-full max-w-xl">
+      <button id="tryBeamBtn"
+        class="flex-1 min-w-[200px] text-left bg-surface border border-grid hover:border-blue/50 rounded-lg px-5 py-4 shadow-sm transition-colors group cursor-pointer">
+        <div class="flex items-center gap-2 mb-1.5">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#3B6EA5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="5" x2="5" y2="5"/><line x1="11" y1="5" x2="14" y2="5"/>
+          </svg>
+          <span class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-blue">Beam Design</span>
+        </div>
+        <p class="font-mono text-[10px] text-steel leading-relaxed">SFD · BMD · deflection · RC design</p>
+      </button>
+      <a href="column.html"
+        class="flex-1 min-w-[200px] text-left bg-surface border border-grid hover:border-ink/40 rounded-lg px-5 py-4 shadow-sm transition-colors group">
+        <div class="flex items-center gap-2 mb-1.5">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
+            <rect x="5" y="1" width="6" height="14" rx="1"/>
+            <line x1="5" y1="4" x2="11" y2="4"/>
+            <line x1="5" y1="12" x2="11" y2="12"/>
+          </svg>
+          <span class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Column Design</span>
+        </div>
+        <p class="font-mono text-[10px] text-steel leading-relaxed">Axial · slenderness · reinforcement</p>
+      </a>
+    </div>
 
     <!-- analysis count metric -->
     <div id="analysisMetric" class="mt-10 hidden">
@@ -178,9 +204,11 @@
       <span class="text-blue">·</span>
       <span>SFD · BMD · deflection</span>
       <span class="text-blue">·</span>
-      <span>RC design</span>
+      <span>Beam RC design</span>
       <span class="text-blue">·</span>
-      <span>IndeterminateBeam engine</span>
+      <span>Column design</span>
+      <span class="text-blue">·</span>
+      <span>BS8110 · EC2</span>
     </div>
   </main>
 
@@ -246,14 +274,17 @@
 
 
   // ── modal controls ───────────────────────────────────────────────────────
-  document.getElementById('tryBtn').addEventListener('click', () => {
+  function goToWorkspace() {
     if (localStorage.getItem('beamAi_token')) {
       window.location.href = 'workspace.html';
       return;
     }
     document.getElementById('authModal').classList.add('open');
     tryGooglePrompt();
-  });
+  }
+
+  document.getElementById('tryBtn').addEventListener('click', goToWorkspace);
+  document.getElementById('tryBeamBtn').addEventListener('click', goToWorkspace);
   document.getElementById('closeModal').addEventListener('click', () => {
     document.getElementById('authModal').classList.remove('open');
   });

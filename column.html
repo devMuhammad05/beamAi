@@ -82,6 +82,35 @@
       <button id="errorClose" class="text-orange/60 hover:text-orange transition-colors flex-shrink-0">✕</button>
     </div>
 
+    <!-- Tools hub -->
+    <section class="pt-6">
+      <div class="flex flex-wrap gap-3">
+        <a href="workspace.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
+            <line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="5" x2="5" y2="5"/><line x1="11" y1="5" x2="14" y2="5"/>
+          </svg>
+          <div>
+            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Beam Design</p>
+            <p class="font-mono text-[10px] text-steel">SFD · BMD · deflection · RC design</p>
+          </div>
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
+            <polyline points="6 3 11 8 6 13"/>
+          </svg>
+        </a>
+        <div class="bg-surface border-2 border-blue rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3B6EA5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="1" width="6" height="14" rx="1"/>
+            <line x1="5" y1="4" x2="11" y2="4"/>
+            <line x1="5" y1="12" x2="11" y2="12"/>
+          </svg>
+          <div>
+            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-blue">Column Design</p>
+            <p class="font-mono text-[10px] text-steel">current workspace</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 00 Prompt -->
     <section class="pt-10">
       <div class="flex items-center gap-3 mb-3">
@@ -114,7 +143,7 @@
                   <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">Design Code</p>
                   <div class="inline-flex rounded border border-grid overflow-hidden">
                     <button data-ds="code" data-val="BS8110" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-ink text-paper transition-colors">BS8110</button>
-                    <button data-ds="code" data-val="EC2" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel transition-colors">EC2</button>
+                    <button data-ds="code" data-val="EC2" disabled title="EC2 not yet supported for columns" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel/30 cursor-not-allowed">EC2</button>
                   </div>
                 </div>
                 <div>
