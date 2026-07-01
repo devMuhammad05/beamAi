@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BeamAi - Pad Foundation Design</title>
+<title>BeamAi - Slab Design</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2316243B'/><text x='16' y='23' text-anchor='middle' font-family='Georgia,serif' font-weight='bold' font-size='20' fill='%23F5A623'>B</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,20 +15,20 @@
     theme: {
       extend: {
         colors: {
-          paper: '#EEF1F4',
-          ink:   '#16243B',
-          steel: '#5E7081',
-          grid:  '#D7E0EA',
-          orange:'#E8623A',
-          teal:  '#2F8F6F',
-          blue:  '#3B6EA5',
-          surface:'#FFFFFF',
+          paper:   '#EEF1F4',
+          ink:     '#16243B',
+          steel:   '#5E7081',
+          grid:    '#D7E0EA',
+          orange:  '#E8623A',
+          teal:    '#2F8F6F',
+          blue:    '#3B6EA5',
+          surface: '#FFFFFF',
           amber:   '#F5A623',
         },
         fontFamily: {
           display: ['Space Grotesk','sans-serif'],
-          body: ['IBM Plex Sans','sans-serif'],
-          mono: ['IBM Plex Mono','monospace']
+          body:    ['IBM Plex Sans','sans-serif'],
+          mono:    ['IBM Plex Mono','monospace']
         }
       }
     }
@@ -56,7 +56,7 @@
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-baseline gap-3">
         <span class="font-display font-bold text-xl tracking-tight text-ink">Beam<span class="text-amber">Ai</span></span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">foundation design workspace</span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">slab design workspace</span>
       </div>
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 border border-grid rounded-full px-3 py-1.5 bg-surface">
@@ -111,47 +111,50 @@
             <polyline points="6 3 11 8 6 13"/>
           </svg>
         </a>
-        <div class="bg-surface border-2 border-blue rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3B6EA5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <a href="foundation.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
             <rect x="1" y="10" width="14" height="5" rx="1"/>
             <rect x="5" y="6" width="6" height="4"/>
             <line x1="6" y1="10" x2="6" y2="15"/>
             <line x1="10" y1="10" x2="10" y2="15"/>
           </svg>
           <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-blue">Foundation Design</p>
-            <p class="font-mono text-[10px] text-steel">current workspace</p>
+            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Foundation Design</p>
+            <p class="font-mono text-[10px] text-steel">pad foundation design &amp; checks</p>
           </div>
-        </div>
-        <a href="slab.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
+            <polyline points="6 3 11 8 6 13"/>
+          </svg>
+        </a>
+        <div class="bg-surface border-2 border-blue rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3B6EA5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <rect x="1" y="4" width="14" height="8" rx="1"/>
             <line x1="5.5" y1="4" x2="5.5" y2="12"/>
             <line x1="10.5" y1="4" x2="10.5" y2="12"/>
             <line x1="1" y1="8" x2="15" y2="8"/>
           </svg>
           <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Slab Design</p>
-            <p class="font-mono text-[10px] text-steel">one-way · two-way · RC design</p>
+            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-blue">Slab Design</p>
+            <p class="font-mono text-[10px] text-steel">current workspace</p>
           </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
-            <polyline points="6 3 11 8 6 13"/>
-          </svg>
-        </a>
+        </div>
       </div>
     </section>
 
-    <!-- 00 Prompt -->
+    <!-- 00 Input -->
     <section class="pt-10">
       <div class="flex items-center gap-3 mb-3">
         <span class="font-mono text-xs text-steel section-tag">00</span>
         <h2 class="font-display text-sm font-semibold uppercase tracking-[0.18em]">Input</h2>
         <div class="h-px flex-1 bg-grid"></div>
       </div>
+
       <div class="bg-surface border border-grid rounded-lg p-4 shadow-sm">
+
+        <!-- Prompt -->
         <textarea id="promptInput" rows="3"
           class="w-full resize-none font-body text-[15px] leading-relaxed text-ink placeholder-steel/60 focus:outline-none focus:ring-2 focus:ring-blue/40 rounded-md p-2 -m-2"
-          placeholder="e.g. &quot;A 300×300 column carrying 900kN on a 2m×2m pad, 500mm deep, allowable bearing pressure 200 kPa&quot;"></textarea>
+          placeholder="e.g. &quot;5m simply supported one-way slab, gk = 5.5 kN/m², qk = 3.0 kN/m², 200mm thick&quot; or &quot;two-way slab 5m × 6m, simply supported all sides, gk = 6 kN/m², qk = 4 kN/m², 175mm thick&quot;"></textarea>
         <div class="flex justify-end mt-1.5">
           <span id="wordCount" class="font-mono text-[11px] text-steel">0/500</span>
         </div>
@@ -168,12 +171,13 @@
 
           <div id="dsAdvancedPanel" class="hidden mt-3 bg-paper rounded-lg p-4 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <!-- Left: Code + fcu + fy -->
               <div class="space-y-3">
                 <div>
                   <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">Design Code</p>
                   <div class="inline-flex rounded border border-grid overflow-hidden">
-                    <button data-ds="code" data-val="BS8110" disabled class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel/30 cursor-not-allowed opacity-40">BS8110</button>
-                    <button data-ds="code" data-val="EC2" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-ink text-paper transition-colors">EC2</button>
+                    <button data-ds="code" data-val="BS8110" class="ds-toggle font-mono text-[11px] px-3 py-1 bg-ink text-paper transition-colors">BS8110</button>
+                    <button data-ds="code" data-val="EC2"    class="ds-toggle font-mono text-[11px] px-3 py-1 bg-surface text-steel transition-colors">EC2</button>
                   </div>
                 </div>
                 <div>
@@ -184,38 +188,45 @@
                     <button data-ds="fck" data-val="30" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-ink text-paper transition-colors">30</button>
                     <button data-ds="fck" data-val="35" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">35</button>
                     <button data-ds="fck" data-val="40" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">40</button>
-                    <input id="dsFckCustom" type="number" min="1" placeholder="other" class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
+                    <input id="dsFckCustom" type="number" min="1" placeholder="other"
+                      class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
                   </div>
                 </div>
                 <div>
-                  <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">f<sub>y</sub> (N/mm²)</p>
+                  <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">f<sub>y</sub> / f<sub>yk</sub> (N/mm²)</p>
                   <div class="flex flex-wrap gap-1">
                     <button data-ds="fyk" data-val="250" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">250</button>
                     <button data-ds="fyk" data-val="410" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">410</button>
                     <button data-ds="fyk" data-val="460" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">460</button>
                     <button data-ds="fyk" data-val="500" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-ink text-paper transition-colors">500</button>
-                    <input id="dsFykCustom" type="number" min="1" placeholder="other" class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
+                    <input id="dsFykCustom" type="number" min="1" placeholder="other"
+                      class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
                   </div>
                 </div>
               </div>
+              <!-- Right: Cover + bars -->
               <div class="space-y-3">
                 <div>
                   <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">Nominal Cover (mm)</p>
                   <div class="flex flex-wrap gap-1">
-                    <button data-ds="cover" data-val="40"  class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">40</button>
-                    <button data-ds="cover" data-val="50"  class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-ink text-paper transition-colors">50</button>
-                    <button data-ds="cover" data-val="75"  class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">75</button>
-                    <input id="dsCoverCustom" type="number" min="1" placeholder="other" class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
+                    <button data-ds="cover" data-val="20" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">20</button>
+                    <button data-ds="cover" data-val="25" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">25</button>
+                    <button data-ds="cover" data-val="30" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">30</button>
+                    <button data-ds="cover" data-val="40" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-ink text-paper transition-colors">40</button>
+                    <button data-ds="cover" data-val="50" class="ds-chip font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">50</button>
+                    <input id="dsCoverCustom" type="number" min="1" placeholder="other"
+                      class="font-mono text-[11px] w-14 px-2 py-0.5 rounded border border-grid bg-surface text-ink placeholder-steel/40 focus:outline-none focus:border-blue/60">
                   </div>
                 </div>
                 <div>
                   <p class="font-mono text-[10px] text-steel/60 uppercase tracking-[0.15em] mb-1.5">Preferred bar sizes</p>
                   <div class="flex flex-wrap gap-1">
+                    <button data-ds="bars" data-val="T8"  class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T8</button>
+                    <button data-ds="bars" data-val="T10" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T10</button>
                     <button data-ds="bars" data-val="T12" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T12</button>
                     <button data-ds="bars" data-val="T16" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T16</button>
                     <button data-ds="bars" data-val="T20" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T20</button>
                     <button data-ds="bars" data-val="T25" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T25</button>
-                    <button data-ds="bars" data-val="T32" class="ds-multi font-mono text-[11px] px-2 py-0.5 rounded border border-grid bg-surface text-ink hover:border-ink/40 transition-colors">T32</button>
                   </div>
                   <p class="font-mono text-[10px] text-steel/40 mt-1 italic">leave unset — engine picks freely</p>
                 </div>
@@ -225,8 +236,9 @@
         </div>
 
         <div class="flex justify-end mt-2 pt-3 border-t border-grid">
-          <button id="runBtn" class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
-            Run foundation design
+          <button id="runBtn"
+            class="font-display text-sm font-semibold bg-ink text-paper px-5 py-2 rounded-md hover:bg-blue transition-colors focus:outline-none focus:ring-2 focus:ring-blue/50 focus:ring-offset-2 focus:ring-offset-surface">
+            Run slab design
           </button>
         </div>
       </div>
@@ -240,7 +252,7 @@
           <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.2s"></div>
           <div class="w-2 h-2 rounded-full bg-blue animate-pulse" style="animation-delay: 0.4s"></div>
         </div>
-        <p class="font-mono text-sm text-steel">Designing your foundation…</p>
+        <p class="font-mono text-sm text-steel">Designing your slab…</p>
       </div>
     </section>
 
@@ -259,6 +271,6 @@
     </div>
   </footer>
 
-<script src="js/foundation.js"></script>
+<script src="js/slab.js"></script>
 </body>
 </html>
