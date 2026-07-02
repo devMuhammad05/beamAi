@@ -59,12 +59,9 @@
         <span class="font-display font-bold text-xl tracking-tight text-ink">Beam<span class="text-amber">Ai</span></span>
         <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-steel hidden sm:inline">analysis &amp; design workspace</span>
       </div>
-      <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 border border-grid rounded-full px-3 py-1.5 bg-surface">
-          <div id="userAvatar" class="w-5 h-5 rounded-full bg-blue flex items-center justify-center text-white font-display font-bold text-[10px]">M</div>
-          <span id="userName" class="font-mono text-[11px] text-ink">Muhammad</span>
-        </div>
-        <button id="signOutBtn" class="font-mono text-[11px] text-steel hover:text-ink transition-colors">sign out</button>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div id="workspaceSwitcher"></div>
+        <div id="userMenu"></div>
       </div>
     </div>
   </header>
@@ -82,66 +79,6 @@
       </div>
       <button id="errorClose" class="text-orange/60 hover:text-orange transition-colors flex-shrink-0">✕</button>
     </div>
-
-    <!-- Tools hub -->
-    <section class="pt-6">
-      <div class="flex flex-wrap gap-3">
-        <div class="bg-surface border-2 border-blue rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#3B6EA5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="2" y1="7" x2="14" y2="7"/><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="10" x2="14" y2="10"/>
-            <polygon points="2,12 2,15 5,15 14,3 11,0" fill="#3B6EA5" stroke="none"/>
-          </svg>
-          <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-blue">Beam Analysis &amp; Design</p>
-            <p class="font-mono text-[10px] text-steel">current workspace</p>
-          </div>
-        </div>
-        <a href="column.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
-            <rect x="5" y="1" width="6" height="14" rx="1"/>
-            <line x1="5" y1="4" x2="11" y2="4"/>
-            <line x1="5" y1="12" x2="11" y2="12"/>
-          </svg>
-          <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] group-hover:text-ink transition-colors">Column Design</p>
-            <p class="font-mono text-[10px] text-steel">RC column design &amp; checks</p>
-          </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
-            <polyline points="6 3 11 8 6 13"/>
-          </svg>
-        </a>
-        <a href="foundation.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
-            <rect x="1" y="10" width="14" height="5" rx="1"/>
-            <rect x="5" y="6" width="6" height="4"/>
-            <line x1="6" y1="10" x2="6" y2="15"/>
-            <line x1="10" y1="10" x2="10" y2="15"/>
-          </svg>
-          <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Foundation Design</p>
-            <p class="font-mono text-[10px] text-steel">pad foundation design &amp; checks</p>
-          </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
-            <polyline points="6 3 11 8 6 13"/>
-          </svg>
-        </a>
-        <a href="slab.html" class="bg-surface border border-grid hover:border-ink/30 rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm transition-colors group">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
-            <rect x="1" y="4" width="14" height="8" rx="1"/>
-            <line x1="5.5" y1="4" x2="5.5" y2="12"/>
-            <line x1="10.5" y1="4" x2="10.5" y2="12"/>
-            <line x1="1" y1="8" x2="15" y2="8"/>
-          </svg>
-          <div>
-            <p class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">Slab Design</p>
-            <p class="font-mono text-[10px] text-steel">one-way · two-way · RC design</p>
-          </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto group-hover:stroke-ink transition-colors">
-            <polyline points="6 3 11 8 6 13"/>
-          </svg>
-        </a>
-      </div>
-    </section>
 
     <!-- How it works -->
     <section class="pt-8">
@@ -567,6 +504,8 @@
   </div>
 </div>
 
+<script src="js/nav.js"></script>
+<script>renderNav('beam');</script>
 <script src="js/workspace.js"></script>
 </body>
 </html>

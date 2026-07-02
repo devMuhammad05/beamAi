@@ -213,14 +213,23 @@
         </div>
         <p class="font-mono text-[10px] text-steel leading-relaxed">One-way · two-way · RC design</p>
       </a>
+      <a href="frame.html"
+        class="flex-1 min-w-[200px] text-left bg-surface border border-grid hover:border-ink/40 rounded-lg px-5 py-4 shadow-sm transition-colors group">
+        <div class="flex items-center gap-2 mb-1.5">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#5E7081" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="group-hover:stroke-ink transition-colors">
+            <line x1="3" y1="14" x2="3" y2="4"/><line x1="13" y1="14" x2="13" y2="4"/><line x1="3" y1="4" x2="13" y2="4"/>
+          </svg>
+          <span class="font-display text-xs font-semibold uppercase tracking-[0.14em] text-steel group-hover:text-ink transition-colors">2D Frame Analysis</span>
+        </div>
+        <p class="font-mono text-[10px] text-steel leading-relaxed">Stiffness-method frame builder &amp; solver</p>
+      </a>
     </div>
 
-    <!-- analysis count metric -->
-    <div id="analysisMetric" class="mt-10 hidden">
+    <!-- trust metric -->
+    <div class="mt-10">
       <div class="inline-flex items-center gap-3 border border-grid bg-surface rounded-full px-5 py-2.5 shadow-sm">
-        <span class="w-2 h-2 rounded-full bg-teal animate-pulse inline-block"></span>
-        <span class="font-mono text-[12px] text-steel uppercase tracking-[0.15em]">beams analysed</span>
-        <span id="analysisCount" class="font-display font-bold text-lg text-ink">—</span>
+        <span class="w-2 h-2 rounded-full bg-teal inline-block"></span>
+        <span class="font-mono text-[12px] text-steel uppercase tracking-[0.15em]">Used by <span class="text-ink font-semibold">80+</span> engineers to solve <span class="text-ink font-semibold">100+</span> engineering problems</span>
       </div>
     </div>
 
@@ -376,33 +385,6 @@
   }
 
   document.getElementById('googleSignIn').addEventListener('click', tryGooglePrompt);
-
-  // ── analysis count metric ────────────────────────────────────────────────
-  async function loadAnalysisCount() {
-    const delays = [0, 3000, 6000]; // immediate, then retry after 3 s and 6 s
-    for (const delay of delays) {
-      if (delay) await new Promise(r => setTimeout(r, delay));
-      try {
-        const res = await fetch(`${API_BASE}/api/total_beam_analysed`, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) continue;
-        const { total } = await res.json();
-        if (typeof total !== 'number') continue;
-        const el = document.getElementById('analysisCount');
-        document.getElementById('analysisMetric').classList.remove('hidden');
-        const start = performance.now();
-        const step = (now) => {
-          const progress = Math.min((now - start) / 1000, 1);
-          const eased = 1 - Math.pow(1 - progress, 3);
-          el.textContent = Math.floor(eased * total).toLocaleString();
-          if (progress < 1) requestAnimationFrame(step);
-          else el.textContent = total.toLocaleString();
-        };
-        requestAnimationFrame(step);
-        return;
-      } catch { /* server still waking — try again */ }
-    }
-  }
-  loadAnalysisCount();
 
   // ── init GSI after script loads ──────────────────────────────────────────
   window.addEventListener('load', () => {
